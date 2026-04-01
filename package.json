@@ -1,0 +1,33 @@
+{
+  "name": "goalrate-desktop",
+  "private": true,
+  "packageManager": "pnpm@8.15.0",
+  "engines": {
+    "node": ">=24 <26"
+  },
+  "scripts": {
+    "dev": "turbo run tauri:dev --filter=@goalrate-app/desktop",
+    "build": "turbo run tauri:build --filter=@goalrate-app/desktop",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules && cargo clean",
+    "rust:build": "cargo build",
+    "rust:build:release": "cargo build --release",
+    "rust:test": "cargo test",
+    "rust:clippy": "cargo clippy --all-targets --all-features -- -D warnings",
+    "rust:fmt": "cargo fmt --all",
+    "rust:fmt:check": "cargo fmt --all -- --check"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "prettier": "^3.8.1",
+    "turbo": "^2.8.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "glob": "^10.4.5",
+      "rimraf": "^4.4.1"
+    }
+  }
+}

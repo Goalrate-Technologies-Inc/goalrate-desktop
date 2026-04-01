@@ -1,0 +1,28 @@
+[package]
+name = "goalrate-crypto"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "End-to-end encryption for Goalrate team vaults"
+
+[dependencies]
+ring.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+
+# Additional crypto dependencies
+base64.workspace = true
+rand.workspace = true
+zeroize.workspace = true
+
+# Asymmetric crypto (X25519 key exchange)
+x25519-dalek.workspace = true
+
+# ChaCha20Poly1305 AEAD
+chacha20poly1305.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1,0 +1,433 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+/* Map daily-loop CSS variables to Tailwind theme tokens so that utility
+   classes like `text-text-primary`, `bg-surface`, `border-border-light`
+   resolve correctly inside `.daily-loop-theme`. */
+@theme inline {
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+  --color-accent-goals: var(--accent-goals);
+  --color-accent-goals-light: var(--accent-goals-light);
+  --color-accent-projects: var(--accent-projects);
+  --color-surface: var(--surface);
+  --color-surface-warm: var(--surface-warm);
+  --color-surface-strong: var(--surface-strong);
+  --color-border-light: var(--border-light);
+  --color-border: var(--border);
+  --color-semantic-error: var(--semantic-error);
+  --color-btn-bg: var(--btn-bg);
+  --color-btn-text: var(--btn-text);
+  --color-hover-bg: var(--hover-bg);
+  --color-bg: var(--bg);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-progress-low: var(--progress-low);
+  --color-progress-mid: var(--progress-mid);
+  --color-progress-high: var(--progress-high);
+}
+
+@layer base {
+  :root {
+    font-family: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+
+    color-scheme: light dark;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+
+    /* Radius */
+    --radius: 8px;
+
+    /* GoalRate Brand Colors */
+    --goalrate-purple: #6301a0;
+    --goalrate-purple-hover: #4a0078;
+    --goalrate-blue: #015fa0;
+    --goalrate-blue-hover: #01497d;
+    --goalrate-orange: #955401;
+    --goalrate-yellow: #958001;
+    --goalrate-green: #019201;
+
+    /* Shadcn UI Light Mode Colors */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --divider: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+  }
+
+  .dark {
+    /* Shadcn UI Dark Mode Colors */
+    --background: 240 2% 9%;
+    --foreground: 213 31% 91%;
+    --card: 240 2% 9%;
+    --card-foreground: 213 31% 91%;
+    --popover: 240 2% 9%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 222 47% 11%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 220 3% 17%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+    --accent: 220.2 3.5% 17.1%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220.2 3.5% 17.1%;
+    --divider: 220.2 3.5% 17.1%;
+    --input: 220.2 3.5% 17.1%;
+    --ring: 220.2 3.5% 17.1%;
+  }
+
+  html,
+  body,
+  #root {
+    overscroll-behavior: none;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+/* Dark mode text and background overrides for desktop app */
+@layer utilities {
+  /* Ensure proper contrast for text in dark mode */
+  html.dark .text-gray-900 { color: #FFFFFF; }
+  html.dark .text-gray-800 { color: #F7F8F8; }
+  html.dark .text-gray-700 { color: #EEEFF0; }
+  html.dark .text-gray-600 { color: #D6D7DA; }
+  html.dark .text-gray-500 { color: #C0C1C5; }
+  html.dark .text-black { color: #FFFFFF; }
+
+  /* Background overrides */
+  html.dark .bg-gray-50 { background-color: #2A2B2D; }
+  html.dark .bg-gray-100 { background-color: #434448; }
+  html.dark .bg-white { background-color: #161617; }
+  html.dark .bg-muted { background-color: #2A2B2D; }
+
+  /* Border overrides */
+  html.dark .border-gray-200 { border-color: #5F6066; }
+  html.dark .border-gray-300 { border-color: #7D7F85; }
+  html.dark .border-divider { border-color: hsl(var(--divider)); }
+
+  /* Sidebar specific dark mode styles */
+  html.dark aside {
+    background-color: hsl(var(--card));
+    border-color: hsl(var(--divider));
+  }
+
+  /* Dialog borders should match rails */
+  [data-state][role='dialog'] {
+    border-color: hsl(var(--divider));
+  }
+
+  /* Force wide dialogs to expand to viewport width caps. */
+  [data-state][role='dialog'][data-size='wide'] {
+    width: 95vw !important;
+    max-width: 95vw !important;
+  }
+
+  /* Remove any border/box around the dialog close X */
+  [data-state][role='dialog'] [data-dialog-close='true'] {
+    all: unset;
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: hsl(var(--muted-foreground));
+    cursor: pointer;
+  }
+
+  [data-state][role='dialog'] [data-dialog-close='true']:focus,
+  [data-state][role='dialog'] [data-dialog-close='true']:focus-visible,
+  [data-state][role='dialog'] [data-dialog-close='true']:active {
+    outline: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    background: transparent !important;
+    --tw-ring-offset-shadow: 0 0 #0000 !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+  }
+
+  /* Button and interactive element contrast */
+  html.dark .bg-primary\/10 {
+    background-color: rgba(248, 250, 252, 0.1);
+  }
+
+  html.dark .text-primary {
+    color: hsl(var(--primary));
+  }
+
+  /* Input and form element styles */
+  html.dark input,
+  html.dark textarea,
+  html.dark select {
+    background-color: hsl(var(--card));
+    border-color: hsl(var(--border));
+    color: hsl(var(--foreground));
+  }
+
+  html.dark input::placeholder,
+  html.dark textarea::placeholder {
+    color: hsl(var(--muted-foreground));
+  }
+}
+
+/* ── Daily Loop: DESIGN.md Kinetic Editorial Theme ── */
+
+/* Override font-serif and font-mono for DESIGN.md fonts */
+.font-serif {
+  font-family: 'Instrument Serif', ui-serif, Georgia, serif !important;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+}
+
+/* Daily Loop custom properties — light mode */
+.daily-loop-theme {
+  --bg: #F5F1EA;
+  --bg-subtle: #EDE8DF;
+  --surface: #FFFFFF;
+  --surface-warm: #F0EBE2;
+  --surface-strong: #E5DFD4;
+  --text-primary: #1C1917;
+  --text-secondary: #57534E;
+  --text-muted: #A8A29E;
+  --text-inverse: #F5F1EA;
+  --accent-goals: #7B1FD4;
+  --accent-goals-light: #EDE0FA;
+  --accent-projects: #0A6E8A;
+  --border: #D6D0C5;
+  --border-light: #E5DFD4;
+  --progress-low: #C65D1E;
+  --progress-low-light: #FDEADF;
+  --progress-mid: #C9A227;
+  --progress-high: #3E7F4F;
+  --progress-high-light: #DFF0E4;
+  --semantic-error: #C2453A;
+  --btn-bg: #1C1917;
+  --btn-text: #F5F1EA;
+  --hover-bg: rgba(0, 0, 0, 0.05);
+}
+
+/* Daily Loop custom properties — dark mode */
+html.dark .daily-loop-theme,
+.daily-loop-theme:is(.dark *) {
+  --bg: #0E0C0A;
+  --bg-subtle: #171412;
+  --surface: #1C1917;
+  --surface-warm: #231F1B;
+  --surface-strong: #2A2521;
+  --text-primary: #F5F1EA;
+  --text-secondary: #B8B2A8;
+  --text-muted: #78716C;
+  --text-inverse: #1C1917;
+  --accent-goals: #A855F7;
+  --accent-goals-light: #2D1A4E;
+  --accent-projects: #22D3EE;
+  --border: #3D3730;
+  --border-light: #2E2923;
+  --progress-low: #E87A3E;
+  --progress-low-light: #2E1A0E;
+  --progress-mid: #E5BE3D;
+  --progress-high: #5AAD6A;
+  --progress-high-light: #122018;
+  --semantic-error: #EF6B5E;
+  --btn-bg: #F5F1EA;
+  --btn-text: #1C1917;
+  --hover-bg: rgba(255, 255, 255, 0.07);
+}
+
+/* ── Rendered Markdown (prose) ── */
+.prose {
+  color: var(--text-primary, hsl(var(--foreground)));
+  line-height: 1.7;
+  max-width: 65ch;
+  font-size: 0.875rem;
+}
+
+.prose.max-w-none { max-width: none; }
+
+/* Headings */
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+  color: var(--text-primary, hsl(var(--foreground)));
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+.prose h1 { font-size: 1.75em; }
+.prose h2 { font-size: 1.4em; }
+.prose h3 { font-size: 1.15em; }
+.prose h4 { font-size: 1em; }
+.prose h5 { font-size: 0.9em; }
+.prose h6 { font-size: 0.85em; color: var(--text-secondary, hsl(var(--muted-foreground))); }
+
+.prose > :first-child { margin-top: 0; }
+
+/* Paragraphs */
+.prose p {
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+/* Links */
+.prose a {
+  color: var(--accent-goals, #7B1FD4);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose a:hover { opacity: 0.8; }
+
+/* Bold & italic */
+.prose strong { font-weight: 600; color: var(--text-primary, hsl(var(--foreground))); }
+
+/* Strikethrough */
+.prose del {
+  text-decoration: line-through;
+  color: var(--text-muted, hsl(var(--muted-foreground)));
+}
+
+/* Lists */
+.prose ul, .prose ol {
+  padding-left: 1.5em;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.prose ul { list-style-type: disc; }
+.prose ol { list-style-type: decimal; }
+.prose li { margin-top: 0.25em; margin-bottom: 0.25em; }
+.prose li::marker { color: var(--text-muted, hsl(var(--muted-foreground))); }
+
+/* Nested lists */
+.prose ul ul, .prose ol ul { list-style-type: circle; }
+.prose ul ul ul, .prose ol ul ul { list-style-type: square; }
+.prose ol ol { list-style-type: lower-alpha; }
+.prose ol ol ol { list-style-type: lower-roman; }
+
+/* Task lists (checkboxes) — uses classes emitted by remark-gfm */
+.prose .contains-task-list {
+  list-style-type: none;
+  padding-left: 0.25em;
+}
+.prose .task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+.prose .task-list-item > input[type="checkbox"] {
+  margin-top: 0.3em;
+  accent-color: var(--accent-goals, #7B1FD4);
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+
+/* Blockquotes */
+.prose blockquote {
+  border-left: 3px solid var(--accent-goals, #7B1FD4);
+  padding-left: 1em;
+  margin: 1em 0;
+  color: var(--text-secondary, hsl(var(--muted-foreground)));
+  font-style: italic;
+}
+
+/* Horizontal rules */
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--border-light, hsl(var(--border)));
+  margin: 1.5em 0;
+}
+
+/* Code — inline */
+.prose code:not(pre code) {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background-color: var(--surface-warm, hsl(var(--muted)));
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+/* Code — block */
+.prose pre {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background-color: var(--surface-warm, hsl(var(--muted)));
+  border: 1px solid var(--border-light, hsl(var(--border)));
+  border-radius: 8px;
+  padding: 1em;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.6;
+  margin: 1em 0;
+}
+.prose pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* Tables */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.9em;
+  display: block;
+  overflow-x: auto;
+}
+.prose th, .prose td {
+  border: 1px solid var(--border-light, hsl(var(--border)));
+  padding: 0.5em 0.75em;
+}
+.prose th {
+  font-weight: 600;
+  background-color: var(--surface-warm, hsl(var(--muted)));
+}
+
+/* Images */
+.prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 1em 0;
+}
+
+/* Daily-loop theme: use Instrument Serif for headings */
+.daily-loop-theme .prose h1,
+.daily-loop-theme .prose h2,
+.daily-loop-theme .prose h3,
+.daily-loop-theme .prose h4 {
+  font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+}

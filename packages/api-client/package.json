@@ -1,0 +1,97 @@
+{
+  "name": "@goalrate-app/api-client",
+  "version": "0.0.1",
+  "description": "Type-safe HTTP client for Goalrate API",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js",
+      "require": "./dist/auth/index.cjs"
+    },
+    "./vaults": {
+      "types": "./dist/vaults/index.d.ts",
+      "import": "./dist/vaults/index.js",
+      "require": "./dist/vaults/index.cjs"
+    },
+    "./goals": {
+      "types": "./dist/goals/index.d.ts",
+      "import": "./dist/goals/index.js",
+      "require": "./dist/goals/index.cjs"
+    },
+    "./projects": {
+      "types": "./dist/projects/index.d.ts",
+      "import": "./dist/projects/index.js",
+      "require": "./dist/projects/index.cjs"
+    },
+    "./epics": {
+      "types": "./dist/epics/index.d.ts",
+      "import": "./dist/epics/index.js",
+      "require": "./dist/epics/index.cjs"
+    },
+    "./sprints": {
+      "types": "./dist/sprints/index.d.ts",
+      "import": "./dist/sprints/index.js",
+      "require": "./dist/sprints/index.cjs"
+    },
+    "./focus": {
+      "types": "./dist/focus/index.d.ts",
+      "import": "./dist/focus/index.js",
+      "require": "./dist/focus/index.cjs"
+    },
+    "./social": {
+      "types": "./dist/social/index.d.ts",
+      "import": "./dist/social/index.js",
+      "require": "./dist/social/index.cjs"
+    },
+    "./subscriptions": {
+      "types": "./dist/subscriptions/index.d.ts",
+      "import": "./dist/subscriptions/index.js",
+      "require": "./dist/subscriptions/index.cjs"
+    },
+    "./users": {
+      "types": "./dist/users/index.d.ts",
+      "import": "./dist/users/index.js",
+      "require": "./dist/users/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@goalrate-app/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@goalrate-app/eslint-config": "workspace:*",
+    "@goalrate-app/typescript-config": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  }
+}

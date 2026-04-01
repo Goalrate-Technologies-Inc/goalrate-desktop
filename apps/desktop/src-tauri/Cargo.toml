@@ -1,0 +1,57 @@
+[package]
+name = "GoalRate"
+version = "0.1.0"
+description = "GoalRate Desktop Application"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "goalrate_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+# Tauri
+tauri = { version = "2.0", features = [] }
+tauri-plugin-shell = "2.0"
+tauri-plugin-window-state = "2.0"
+tauri-plugin-updater = "2.0"
+tauri-plugin-process = "2.0"
+tauri-plugin-dialog = "2.0"
+tauri-plugin-global-shortcut = "2.0"
+
+# Workspace crates
+vault-core = { path = "../../../crates/vault-core" }
+markdown-parser = { path = "../../../crates/markdown-parser" }
+sqlite-index = { path = "../../../crates/sqlite-index" }
+focus-engine = { path = "../../../crates/focus-engine" }
+daily-loop = { path = "../../../crates/daily-loop" }
+goalrate-crypto = { path = "../../../crates/crypto" }
+
+# Workspace dependencies
+serde.workspace = true
+serde_json.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+once_cell = "1.19"
+serde_yaml.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+log.workspace = true
+notify.workspace = true
+
+# Utilities
+open = "5"
+uuid = { version = "1.0", features = ["v4"] }
+dirs = "5.0"
+keyring = { version = "3", features = ["apple-native"] }
+portable-pty = "0.8"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

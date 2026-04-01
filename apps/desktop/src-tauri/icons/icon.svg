@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="app-bg" x1="32" y1="6" x2="32" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#FFFFFF" />
+    </linearGradient>
+    <linearGradient id="app-tint" x1="32" y1="6" x2="32" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.02" />
+      <stop offset="100%" stop-color="#DDE4EB" stop-opacity="0.32" />
+    </linearGradient>
+    <radialGradient id="app-sheen" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(18 12) rotate(45) scale(38)">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </radialGradient>
+    <mask id="app-circle-mask">
+      <rect width="64" height="64" fill="white"/>
+      <line x1="32" y1="33" x2="49" y2="16" stroke="black" stroke-width="6" stroke-linecap="round"/>
+      <polyline points="43,16 49,16 49,22" stroke="black" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </mask>
+  </defs>
+
+  <!-- App icon background with rounded rect -->
+  <rect x="7.125" y="7.125" width="49.75" height="49.75" rx="11.2" fill="url(#app-bg)" />
+  <rect x="7.125" y="7.125" width="49.75" height="49.75" rx="11.2" fill="url(#app-tint)" />
+  <rect x="7.125" y="7.125" width="49.75" height="49.75" rx="11.2" fill="url(#app-sheen)" />
+  <rect x="7.125" y="7.125" width="49.75" height="49.75" rx="11.2" stroke="#E2E8EF" stroke-width="0.75" />
+
+  <!-- GoalRate logo: circle with masked ascending arrow -->
+  <circle cx="32" cy="33" r="16" stroke="#7B1FD4" stroke-width="2.5" fill="none" mask="url(#app-circle-mask)"/>
+  <line x1="32" y1="33" x2="49" y2="16" stroke="#1C1917" stroke-width="2" stroke-linecap="round"/>
+  <polyline points="43,16 49,16 49,22" stroke="#1C1917" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": ["CI", "NODE_ENV"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "outputs": ["coverage/**"]
+    },
+    "lint": {},
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "clean": {
+      "cache": false
+    },
+    "rust:build": {
+      "cache": true,
+      "outputs": ["target/debug/**", "target/release/**"],
+      "inputs": [
+        "crates/**/*.rs",
+        "crates/**/Cargo.toml",
+        "apps/desktop/src-tauri/**/*.rs",
+        "apps/desktop/src-tauri/Cargo.toml",
+        "Cargo.toml",
+        "Cargo.lock"
+      ]
+    },
+    "rust:build:release": {
+      "cache": true,
+      "outputs": ["target/release/**"],
+      "inputs": [
+        "crates/**/*.rs",
+        "crates/**/Cargo.toml",
+        "apps/desktop/src-tauri/**/*.rs",
+        "apps/desktop/src-tauri/Cargo.toml",
+        "Cargo.toml",
+        "Cargo.lock"
+      ]
+    },
+    "rust:test": {
+      "dependsOn": ["rust:build"],
+      "cache": true,
+      "inputs": [
+        "crates/**/*.rs",
+        "crates/**/Cargo.toml",
+        "apps/desktop/src-tauri/**/*.rs"
+      ]
+    },
+    "rust:clippy": {
+      "cache": true,
+      "inputs": [
+        "crates/**/*.rs",
+        "crates/**/Cargo.toml",
+        "apps/desktop/src-tauri/**/*.rs"
+      ]
+    },
+    "rust:fmt:check": {
+      "cache": true,
+      "inputs": [
+        "crates/**/*.rs",
+        "apps/desktop/src-tauri/**/*.rs"
+      ]
+    },
+    "tauri:dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["^build"]
+    },
+    "tauri:build": {
+      "dependsOn": ["^build", "rust:build:release"],
+      "outputs": ["src-tauri/target/release/bundle/**"]
+    }
+  }
+}

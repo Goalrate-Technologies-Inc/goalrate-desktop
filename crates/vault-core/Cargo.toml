@@ -1,0 +1,34 @@
+[package]
+name = "vault-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Core vault operations for Goalrate local-first storage"
+
+[dependencies]
+# Workspace dependencies
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+tokio.workspace = true
+notify.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+log.workspace = true
+
+# Local crate dependencies
+markdown-parser = { path = "../markdown-parser" }
+
+# Crate-specific dependencies
+walkdir.workspace = true
+dirs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+mockall.workspace = true
+tokio = { workspace = true, features = ["test-util", "macros"] }
+serde_yaml.workspace = true

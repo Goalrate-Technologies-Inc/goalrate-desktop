@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "GoalRate",
+  "version": "0.1.0",
+  "identifier": "com.goalrate.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:5174",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "GoalRate",
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "targets": "all",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Goalrate-Technologies-Inc/goalrate-app/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEwOEQzMTQyQUY5QjY0ODgKUldTSVpKdXZRakdOb0NCZGtIWkFISkM5LzdOd0orbmtiTGpzR2IzOGh3Qmh5eGw3SkIxTU9xUUEK"
+    }
+  }
+}

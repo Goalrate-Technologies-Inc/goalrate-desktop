@@ -1,0 +1,61 @@
+{
+  "name": "@goalrate-app/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./focus": {
+      "types": "./dist/focus/index.d.ts",
+      "import": "./dist/focus/index.js",
+      "require": "./dist/focus/index.cjs"
+    },
+    "./health": {
+      "types": "./dist/health/index.d.ts",
+      "import": "./dist/health/index.js",
+      "require": "./dist/health/index.cjs"
+    },
+    "./prioritization": {
+      "types": "./dist/prioritization/index.d.ts",
+      "import": "./dist/prioritization/index.js",
+      "require": "./dist/prioritization/index.cjs"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.js",
+      "require": "./dist/utils/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist coverage"
+  },
+  "dependencies": {
+    "@goalrate-app/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@goalrate-app/eslint-config": "workspace:*",
+    "@goalrate-app/typescript-config": "workspace:*",
+    "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^9.39.2",
+    "tsup": "^8.5.1",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

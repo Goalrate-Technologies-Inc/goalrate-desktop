@@ -1,0 +1,168 @@
+# Secrets and Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+config/secrets.*
+credentials.*
+
+# API Keys and Tokens
+**/api-keys.*
+**/tokens.*
+**/*_key
+**/*_token
+**/*_secret
+**/*_password
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+database.url
+db_password.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+/lib/
+/lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+backend_venv/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+.npm
+.eslintcache
+.stylelintcache
+apps/web/package-lock.json
+apps/desktop/pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+*.tgz
+*.tar.gz
+.turbo/
+target/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+.nyc_output
+
+# Temporary folders
+tmp/
+temp/
+
+# Upload directories (often contain user data)
+uploads/
+upload/
+static/uploads/
+media/
+avatars/
+**/uploads/**
+
+# Local development
+.local
+local.*
+.expo/
+.claude/
+**/.claude/
+.playwright-mcp/
+.vault.json
+.goalrate/
+.cargo/*
+!.cargo/config.toml
+
+# SSL certificates
+*.crt
+*.cert
+*.ca-bundle
+
+# Docker
+.dockerignore
+Dockerfile.local
+docker-compose.override.yml
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Manual testing scripts (keep organized test suites in proper directories)
+/test_*.py
+
+# Keep legitimate test suites:
+# - apps/api/tests/ (backend test suite)
+# - apps/web/src/test/ (frontend test suite)
+.gstack/
+.vercel

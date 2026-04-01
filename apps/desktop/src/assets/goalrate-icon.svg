@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <!-- Mask: white = visible, black = hidden -->
+    <mask id="circle-mask">
+      <rect width="64" height="64" fill="white"/>
+      <!-- Knock out space around arrow shaft and head -->
+      <line x1="32" y1="32" x2="56" y2="8" stroke="black" stroke-width="8" stroke-linecap="round"/>
+      <polyline points="47,8 56,8 56,17" stroke="black" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </mask>
+  </defs>
+  <!-- Full circle with mask to create gap around arrow -->
+  <circle cx="32" cy="32" r="22" stroke="#7B1FD4" stroke-width="3.5" fill="none" mask="url(#circle-mask)"/>
+  <!-- Ascending arrow -->
+  <line x1="32" y1="32" x2="56" y2="8" stroke="#1C1917" stroke-width="2.5" stroke-linecap="round"/>
+  <polyline points="47,8 56,8 56,17" stroke="#1C1917" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

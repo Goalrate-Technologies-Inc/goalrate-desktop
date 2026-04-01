@@ -1,0 +1,73 @@
+{
+  "name": "@goalrate-app/crypto",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Encryption utilities for Goalrate vault data (AES-256-GCM, X25519, ChaCha20Poly1305)",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./aes": {
+      "types": "./dist/aes.d.ts",
+      "import": "./dist/aes.js",
+      "require": "./dist/aes.cjs"
+    },
+    "./keys": {
+      "types": "./dist/keys.d.ts",
+      "import": "./dist/keys.js",
+      "require": "./dist/keys.cjs"
+    },
+    "./x25519": {
+      "types": "./dist/x25519.d.ts",
+      "import": "./dist/x25519.js",
+      "require": "./dist/x25519.cjs"
+    },
+    "./chacha": {
+      "types": "./dist/chacha.d.ts",
+      "import": "./dist/chacha.js",
+      "require": "./dist/chacha.cjs"
+    },
+    "./privateKeyStore": {
+      "types": "./dist/privateKeyStore.d.ts",
+      "import": "./dist/privateKeyStore.js",
+      "require": "./dist/privateKeyStore.cjs"
+    },
+    "./keySharing": {
+      "types": "./dist/keySharing.d.ts",
+      "import": "./dist/keySharing.js",
+      "require": "./dist/keySharing.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist coverage"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.1.1",
+    "@noble/curves": "^2.0.1"
+  },
+  "devDependencies": {
+    "@goalrate-app/eslint-config": "workspace:*",
+    "@goalrate-app/typescript-config": "workspace:*",
+    "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^9.39.2",
+    "tsup": "^8.5.1",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
