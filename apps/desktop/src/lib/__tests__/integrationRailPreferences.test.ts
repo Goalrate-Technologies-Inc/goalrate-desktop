@@ -13,17 +13,17 @@ describe('integrationRailPreferences', () => {
 
   it('normalizes provider IDs and removes duplicates', () => {
     expect(
-      normalizeIntegrationProviderIds([' GitHub ', 'openai', 'github', '', 42, null])
-    ).toEqual(['github', 'openai']);
+      normalizeIntegrationProviderIds([' OpenAI ', 'anthropic', 'openai', '', 42, null])
+    ).toEqual(['openai', 'anthropic']);
   });
 
   it('reads normalized provider IDs from storage', () => {
     window.localStorage.setItem(
       INTEGRATION_RAIL_STORAGE_KEY,
-      JSON.stringify(['OpenAI', 'openai', ' local '])
+      JSON.stringify(['OpenAI', 'openai', ' anthropic '])
     );
 
-    expect(readIntegrationRailProviders()).toEqual(['openai', 'local']);
+    expect(readIntegrationRailProviders()).toEqual(['openai', 'anthropic']);
   });
 
   it('returns an empty list when stored JSON is invalid', () => {
@@ -35,10 +35,10 @@ describe('integrationRailPreferences', () => {
   });
 
   it('writes normalized provider IDs to storage', () => {
-    writeIntegrationRailProviders([' github', 'github', 'Perplexity']);
+    writeIntegrationRailProviders([' openai', 'openai', 'Anthropic']);
 
     expect(
       JSON.parse(window.localStorage.getItem(INTEGRATION_RAIL_STORAGE_KEY) ?? '[]')
-    ).toEqual(['github', 'perplexity']);
+    ).toEqual(['openai', 'anthropic']);
   });
 });

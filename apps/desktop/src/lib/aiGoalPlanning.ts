@@ -1,15 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
-import { open } from '@tauri-apps/plugin-shell';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
-const DEFAULT_AI_PROVIDER = 'github';
+const DEFAULT_AI_PROVIDER = 'openai';
 const MODEL_OPTION_SEPARATOR = '::';
-const LOCAL_AI_PROVIDER = 'local';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-const STAGING_API_SECRET = import.meta.env.VITE_STAGING_API_SECRET || '';
-
-const OAUTH_CONNECTABLE_PROVIDERS = new Set<string>(['github']);
 
 type AiProviderPreset = {
   id: string;
@@ -19,18 +12,6 @@ type AiProviderPreset = {
 };
 
 const FALLBACK_AI_PROVIDER_PRESETS: AiProviderPreset[] = [
-  {
-    id: 'github',
-    label: 'GitHub Models',
-    connectionType: 'oauth_or_api_key',
-    message: 'Connect GitHub with OAuth or add your API key.',
-  },
-  {
-    id: LOCAL_AI_PROVIDER,
-    label: 'Ollama',
-    connectionType: 'api_key',
-    message: 'Add your Ollama API key.',
-  },
   {
     id: 'openai',
     label: 'OpenAI',
@@ -42,60 +23,6 @@ const FALLBACK_AI_PROVIDER_PRESETS: AiProviderPreset[] = [
     label: 'Anthropic',
     connectionType: 'api_key',
     message: 'Add your Anthropic API key.',
-  },
-  {
-    id: 'gemini',
-    label: 'Gemini',
-    connectionType: 'api_key',
-    message: 'Add your Gemini API key.',
-  },
-  {
-    id: 'mistral',
-    label: 'Mistral',
-    connectionType: 'api_key',
-    message: 'Add your Mistral API key.',
-  },
-  {
-    id: 'perplexity',
-    label: 'Perplexity',
-    connectionType: 'api_key',
-    message: 'Add your Perplexity API key.',
-  },
-  {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    connectionType: 'api_key',
-    message: 'Add your OpenRouter API key.',
-  },
-  {
-    id: 'groq',
-    label: 'Groq',
-    connectionType: 'api_key',
-    message: 'Add your Groq API key.',
-  },
-  {
-    id: 'azure-openai',
-    label: 'Azure OpenAI',
-    connectionType: 'api_key',
-    message: 'Add your Azure OpenAI API key and set GOALRATE_AZURE_OPENAI_ENDPOINT.',
-  },
-  {
-    id: 'bedrock',
-    label: 'Amazon Bedrock',
-    connectionType: 'sdk',
-    message: 'Configure AWS CLI credentials and region to use Bedrock.',
-  },
-  {
-    id: 'vertex-ai',
-    label: 'Google Vertex AI',
-    connectionType: 'sdk',
-    message: 'Configure gcloud authentication and project to use Vertex AI.',
-  },
-  {
-    id: 'together',
-    label: 'Together AI',
-    connectionType: 'api_key',
-    message: 'Add your Together AI API key.',
   },
 ];
 
@@ -133,6 +60,8 @@ export interface GenerateAiGoalPlanInput {
 
 export interface GenerateAiGoalPlanResult {
   title: string;
+  /** AI-assessed priority: critical, high, medium, or low */
+  priority?: string;
   milestones: string[];
   summary?: string;
   goalOverview?: string;
@@ -160,29 +89,15 @@ export interface GenerateAiGoalJourneySpecResult {
   successCriteria?: string[];
 }
 
-interface IntegrationConnectionResponse {
-  provider: string;
-  connected: boolean;
-  connectedAt?: string;
-}
-
 interface AvailableModelsResponse {
   models: AiModelOption[];
   providers?: AiProviderOption[];
   total: number;
 }
 
-interface IntegrationAuthResponse {
-  authorizationUrl: string;
-  state: string;
-  verificationCode?: string;
-}
-
-export type OAuthVerificationCodeHandler = (code: string) => void;
-
 function parseTauriErrorMessage(error: unknown): string {
   if (!error) {
-    return 'Unknown error while starting OAuth';
+    return 'Unknown error';
   }
 
   if (typeof error === 'string') {
@@ -209,7 +124,7 @@ function parseTauriErrorMessage(error: unknown): string {
     try {
       return JSON.stringify(error);
     } catch {
-      return 'Unknown error while starting OAuth';
+      return 'Unknown error';
     }
   }
 
@@ -217,11 +132,7 @@ function parseTauriErrorMessage(error: unknown): string {
 }
 
 function normalizeProvider(provider?: string): string {
-  const normalized = provider?.trim().toLowerCase() ?? '';
-  if (normalized === 'ollama') {
-    return LOCAL_AI_PROVIDER;
-  }
-  return normalized;
+  return provider?.trim().toLowerCase() ?? '';
 }
 
 function normalizeProviderList(providers?: AiProviderOption[]): AiProviderOption[] {
@@ -235,7 +146,7 @@ function normalizeProviderList(providers?: AiProviderOption[]): AiProviderOption
       ...provider,
       id: normalizeProvider(provider.id),
       label: provider.label?.trim() || provider.id,
-      connectionType: provider.connectionType || 'oauth',
+      connectionType: provider.connectionType || 'api_key',
       connected: Boolean(provider.connected),
       ready: Boolean(provider.ready),
       message: provider.message?.trim() || undefined,
@@ -295,7 +206,7 @@ function mergeProvidersWithFallback(providers: AiProviderOption[]): AiProviderOp
       ...provider,
       id: provider.id,
       label: provider.label || existing?.label || provider.id,
-      connectionType: provider.connectionType || existing?.connectionType || 'oauth',
+      connectionType: provider.connectionType || existing?.connectionType || 'api_key',
       connected: Boolean(provider.connected),
       ready: Boolean(provider.ready),
       message: provider.message ?? existing?.message,
@@ -328,37 +239,6 @@ function mergeProvidersWithFallback(providers: AiProviderOption[]): AiProviderOp
   return ordered;
 }
 
-async function listIntegrationConnections(
-  vaultId?: string
-): Promise<IntegrationConnectionResponse[]> {
-  const trimmedVaultId = vaultId?.trim();
-  return await invoke<IntegrationConnectionResponse[]>(
-    'list_integration_connections',
-    { vaultId: trimmedVaultId ?? null }
-  );
-}
-
-export async function disconnectAiProviderForGoalAssignee(
-  vaultId: string | undefined,
-  provider: string
-): Promise<void> {
-  const normalizedProvider = normalizeProvider(provider);
-  if (!normalizedProvider) {
-    throw new Error('Select an integration provider to disconnect');
-  }
-
-  try {
-    const trimmedVaultId = vaultId?.trim();
-    await invoke('disconnect_integration', {
-      vaultId: trimmedVaultId ?? null,
-      provider: normalizedProvider,
-    });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
 export function getProviderIdFromModelOptionId(modelOptionId: string): string {
   const trimmed = modelOptionId.trim();
   if (!trimmed) {
@@ -381,147 +261,6 @@ export function getAiProviderLabel(providerId: string): string {
   return provider.label;
 }
 
-export async function isAiProviderConnected(
-  vaultId: string | undefined,
-  provider = DEFAULT_AI_PROVIDER
-): Promise<boolean> {
-  if (!navigator.onLine) {
-    return false;
-  }
-
-  try {
-    const connections = await listIntegrationConnections(vaultId);
-    const normalizedProvider = normalizeProvider(provider);
-    return connections.some(
-      (connection) =>
-        normalizeProvider(connection.provider) === normalizedProvider && connection.connected
-    );
-  } catch (error) {
-    console.warn('[AI Goal Planning] Failed to load integration connections:', error);
-    return false;
-  }
-}
-
-export async function connectAiProviderForGoalAssignee(
-  vaultId: string | undefined,
-  provider = DEFAULT_AI_PROVIDER,
-  onVerificationCode?: OAuthVerificationCodeHandler
-): Promise<void> {
-  const normalizedProvider = normalizeProvider(provider);
-  if (!normalizedProvider) {
-    throw new Error('Select an AI provider before connecting');
-  }
-  if (normalizedProvider === LOCAL_AI_PROVIDER) {
-    throw new Error('Ollama uses an API key. Click the Ollama icon to connect.');
-  }
-  if (normalizedProvider === 'openai') {
-    throw new Error('OpenAI uses an API key. Click the OpenAI icon to connect.');
-  }
-  if (normalizedProvider === 'anthropic') {
-    throw new Error('Anthropic uses an API key. Click the Anthropic icon to connect.');
-  }
-  if (normalizedProvider === 'gemini') {
-    throw new Error('Gemini uses an API key. Click the Gemini icon to connect.');
-  }
-  if (normalizedProvider === 'mistral') {
-    throw new Error('Mistral uses an API key. Click the Mistral icon to connect.');
-  }
-  if (normalizedProvider === 'perplexity') {
-    throw new Error('Perplexity uses an API key. Click the Perplexity icon to connect.');
-  }
-  if (normalizedProvider === 'openrouter') {
-    throw new Error('OpenRouter uses an API key. Click the OpenRouter icon to connect.');
-  }
-  if (normalizedProvider === 'groq') {
-    throw new Error('Groq uses an API key. Click the Groq icon to connect.');
-  }
-  if (normalizedProvider === 'azure-openai') {
-    throw new Error('Azure OpenAI uses an API key. Click the Azure OpenAI icon to connect.');
-  }
-  if (normalizedProvider === 'together') {
-    throw new Error('Together AI uses an API key. Click the Together AI icon to connect.');
-  }
-  if (normalizedProvider === 'bedrock') {
-    throw new Error('Amazon Bedrock uses your AWS CLI credentials. Configure AWS CLI and then refresh.');
-  }
-  if (normalizedProvider === 'vertex-ai') {
-    throw new Error('Vertex AI uses gcloud credentials. Configure gcloud and then refresh.');
-  }
-  if (!OAUTH_CONNECTABLE_PROVIDERS.has(normalizedProvider)) {
-    throw new Error('OAuth is not available for this provider. Use its configured connection method.');
-  }
-
-  let auth: IntegrationAuthResponse;
-  try {
-    const trimmedVaultId = vaultId?.trim();
-    const payload: {
-      provider: string;
-      vaultId: string | null;
-      apiBaseUrl: string;
-      stagingApiSecret: string | null;
-    } = {
-      provider: normalizedProvider,
-      vaultId: trimmedVaultId ?? null,
-      apiBaseUrl: API_BASE_URL,
-      stagingApiSecret: STAGING_API_SECRET.trim().length > 0 ? STAGING_API_SECRET : null,
-    };
-    auth = await invoke<IntegrationAuthResponse>('start_integration_oauth', payload);
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-
-  if (normalizedProvider === DEFAULT_AI_PROVIDER) {
-    try {
-      const verificationCode = auth.verificationCode?.trim();
-      if (verificationCode && onVerificationCode) {
-        onVerificationCode(verificationCode);
-      }
-      try {
-        await open(auth.authorizationUrl);
-      } catch {
-        const fallbackLabel = `integration-oauth-${auth.state}`;
-        const existingWindow = await WebviewWindow.getByLabel(fallbackLabel);
-        if (existingWindow) {
-          await existingWindow.setFocus();
-        } else {
-          new WebviewWindow(fallbackLabel, {
-            url: auth.authorizationUrl,
-            title: 'Connect GitHub Models',
-            width: 1120,
-            height: 760,
-            center: true,
-            resizable: true,
-            focus: true,
-          });
-        }
-      }
-      await invoke('wait_for_integration_oauth', { state: auth.state });
-      await emit('integration-connected');
-      return;
-    } catch (error) {
-      throw new Error(parseTauriErrorMessage(error));
-    }
-  }
-
-  const label = `integration-oauth-${auth.state}`;
-  const existingWindow = await WebviewWindow.getByLabel(label);
-  if (existingWindow) {
-    await existingWindow.setFocus();
-    return;
-  }
-
-  const providerLabel = getAiProviderLabel(normalizedProvider);
-  new WebviewWindow(label, {
-    url: auth.authorizationUrl,
-    title: `Connect ${providerLabel}`,
-    width: 1120,
-    height: 760,
-    center: true,
-    resizable: true,
-    focus: true,
-  });
-}
-
 export async function setAnthropicApiKeyForGoalAssignee(apiKey: string): Promise<void> {
   const trimmedApiKey = apiKey.trim();
   if (!trimmedApiKey) {
@@ -536,216 +275,9 @@ export async function setAnthropicApiKeyForGoalAssignee(apiKey: string): Promise
   }
 }
 
-export async function setGitHubApiKeyForGoalAssignee(apiKey: string): Promise<void> {
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('Please enter your GitHub API key.');
-  }
-
-  try {
-    await invoke('set_github_api_key', { apiKey: trimmedApiKey });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function clearGitHubApiKeyForGoalAssignee(): Promise<void> {
-  try {
-    await invoke('clear_github_api_key');
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
 export async function clearAnthropicApiKeyForGoalAssignee(): Promise<void> {
   try {
     await invoke('clear_anthropic_api_key');
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function setOllamaApiKeyForGoalAssignee(apiKey: string): Promise<void> {
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('Please enter your Ollama API key.');
-  }
-
-  try {
-    await invoke('set_ollama_api_key', { apiKey: trimmedApiKey });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function clearOllamaApiKeyForGoalAssignee(): Promise<void> {
-  try {
-    await invoke('clear_ollama_api_key');
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function setGeminiApiKeyForGoalAssignee(apiKey: string): Promise<void> {
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('Please enter your Gemini API key.');
-  }
-
-  try {
-    await invoke('set_gemini_api_key', { apiKey: trimmedApiKey });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function clearGeminiApiKeyForGoalAssignee(): Promise<void> {
-  try {
-    await invoke('clear_gemini_api_key');
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function setMistralApiKeyForGoalAssignee(apiKey: string): Promise<void> {
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('Please enter your Mistral API key.');
-  }
-
-  try {
-    await invoke('set_mistral_api_key', { apiKey: trimmedApiKey });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function clearMistralApiKeyForGoalAssignee(): Promise<void> {
-  try {
-    await invoke('clear_mistral_api_key');
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function setPerplexityApiKeyForGoalAssignee(apiKey: string): Promise<void> {
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('Please enter your Perplexity API key.');
-  }
-
-  try {
-    await invoke('set_perplexity_api_key', { apiKey: trimmedApiKey });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function clearPerplexityApiKeyForGoalAssignee(): Promise<void> {
-  try {
-    await invoke('clear_perplexity_api_key');
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function setOpenRouterApiKeyForGoalAssignee(apiKey: string): Promise<void> {
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('Please enter your OpenRouter API key.');
-  }
-
-  try {
-    await invoke('set_openrouter_api_key', { apiKey: trimmedApiKey });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function clearOpenRouterApiKeyForGoalAssignee(): Promise<void> {
-  try {
-    await invoke('clear_openrouter_api_key');
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function setGroqApiKeyForGoalAssignee(apiKey: string): Promise<void> {
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('Please enter your Groq API key.');
-  }
-
-  try {
-    await invoke('set_groq_api_key', { apiKey: trimmedApiKey });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function clearGroqApiKeyForGoalAssignee(): Promise<void> {
-  try {
-    await invoke('clear_groq_api_key');
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function setAzureOpenAiApiKeyForGoalAssignee(apiKey: string): Promise<void> {
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('Please enter your Azure OpenAI API key.');
-  }
-
-  try {
-    await invoke('set_azure_openai_api_key', { apiKey: trimmedApiKey });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function clearAzureOpenAiApiKeyForGoalAssignee(): Promise<void> {
-  try {
-    await invoke('clear_azure_openai_api_key');
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function setTogetherApiKeyForGoalAssignee(apiKey: string): Promise<void> {
-  const trimmedApiKey = apiKey.trim();
-  if (!trimmedApiKey) {
-    throw new Error('Please enter your Together AI API key.');
-  }
-
-  try {
-    await invoke('set_together_api_key', { apiKey: trimmedApiKey });
-    await emit('integration-connected');
-  } catch (error) {
-    throw new Error(parseTauriErrorMessage(error));
-  }
-}
-
-export async function clearTogetherApiKeyForGoalAssignee(): Promise<void> {
-  try {
-    await invoke('clear_together_api_key');
     await emit('integration-connected');
   } catch (error) {
     throw new Error(parseTauriErrorMessage(error));

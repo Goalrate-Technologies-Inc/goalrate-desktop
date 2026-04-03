@@ -57,8 +57,16 @@ pub struct GoalTaskFrontmatter {
     pub completed_by: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<String>,
+    /// Recurrence frequency: daily, weekdays, weekly, monthly, yearly,
+    /// or custom like every_3_days, every_2_weeks. Absent = non-recurring.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub recurring: Option<bool>,
+    pub recurring: Option<String>,
+    /// Date when recurrence begins (YYYY-MM-DD)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence_start: Option<String>,
+    /// Date when recurrence ends (YYYY-MM-DD)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence_end: Option<String>,
     /// Earliest date this task should appear in a daily plan (YYYY-MM-DD)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduled_date: Option<String>,

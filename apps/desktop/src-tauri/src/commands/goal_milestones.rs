@@ -254,6 +254,9 @@ fn milestone_to_goal_task(entry: &MilestoneEntry) -> GoalTask {
         subtasks: Vec::new(),
         notes: None,
         publish_on_complete: false,
+        recurring: None,
+        recurrence_start: None,
+        recurrence_end: None,
         created: now.clone(),
         updated: now,
     }

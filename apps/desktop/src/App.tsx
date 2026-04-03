@@ -9,7 +9,6 @@ import { PreferencesProvider } from './context/PreferencesContext';
 import { QuickCaptureDialog } from './components/QuickCaptureDialog';
 import { DailyLoopApp } from './pages/DailyLoopApp';
 
-const IntegrationCallbackPage = lazy(() => import('./pages/IntegrationCallbackPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 
@@ -69,7 +68,6 @@ function AppContent(): React.ReactElement {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
-            <Route path="/integrations/callback" element={<IntegrationCallbackPage />} />
             <Route path="/*" element={<DailyLoopApp />} />
           </Routes>
         </Suspense>

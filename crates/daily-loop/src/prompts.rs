@@ -3,6 +3,9 @@
 /// Threshold: tasks deferred this many times trigger AI confrontation
 pub const DEFERRAL_CONFRONTATION_THRESHOLD: i32 = 3;
 
+/// Threshold: tasks deferred this many times trigger automatic subtask breakdown
+pub const SUBTASK_BREAKDOWN_THRESHOLD: i32 = 2;
+
 /// Threshold: minimum check-ins before pattern recognition activates
 pub const PATTERN_RECOGNITION_THRESHOLD: i32 = 5;
 
@@ -31,7 +34,7 @@ Respond with ONLY valid JSON matching this schema:
       "id": "task_id_1",
       "title": "Concrete actionable task",
       "goal_id": "goal_id this task belongs to",
-      "recurring": false
+      "recurring": "none"
     }
   ],
   "deferrals_confrontation": [
@@ -39,6 +42,14 @@ Respond with ONLY valid JSON matching this schema:
       "task_id": "task_id",
       "deferral_count": 4,
       "reasoning": "Direct question about whether to keep, archive, or reschedule"
+    }
+  ],
+  "task_breakdowns": [
+    {
+      "task_id": "task_id_of_deferred_parent",
+      "subtasks": [
+        { "id": "sub_short_slug", "title": "Small, specific, completable-in-one-day action" }
+      ]
     }
   ],
   "daily_insight": "One sentence of strategic context for the day",
@@ -52,14 +63,20 @@ Respond with ONLY valid JSON matching this schema:
 - Keep daily_insight concise — one sentence connecting today's work to bigger goals
 - Only include pattern_note if historical data is provided
 - ordered_tasks contains objects with id, title, goal_id, and recurring
-- For each task, set "recurring": true if it repeats regularly (e.g., daily standup, weekly review, exercise, meditation, journaling) or "recurring": false if it is a one-time task
+- For each task, set "recurring" to the recurrence frequency: "daily", "weekdays", "weekly", "monthly", "yearly", or "none" for one-time tasks. Use the most specific frequency that fits (e.g., daily standup → "daily", weekly review → "weekly", exercise every day → "daily")
 - If existing tasks are provided in context, use their exact IDs
 - If NO tasks exist, generate 4-7 concrete actionable tasks with new IDs (format: "task_<short_slug>")
 - Each generated task must link to a goal_id from the provided goals
 - Tasks should be completable in one day — specific and actionable, not vague
 - Completed non-recurring tasks should NOT appear in the plan — they are already filtered from context
 - Completed recurring tasks (marked [COMPLETED]) should be included — they reset each day
-- Tasks scheduled for a future date are filtered from context until that date — do not generate duplicates of scheduled tasks"#;
+- Tasks scheduled for a future date are filtered from context until that date — do not generate duplicates of scheduled tasks
+- For tasks deferred 2+ times that do NOT already have subtasks, generate a breakdown in task_breakdowns
+- Each breakdown splits the parent task into 2-5 small, concrete subtasks completable in one day
+- Subtask IDs must use the format "sub_<short_slug>" (e.g., "sub_hero_layout", "sub_write_cta")
+- Include both the parent task AND its subtasks in ordered_tasks — subtasks should appear right after their parent
+- Do NOT break down tasks that already have subtasks (marked [HAS SUBTASKS] in context)
+- task_breakdowns may be an empty array if no tasks need breaking down"#;
 
 /// System prompt for chat-based reprioritization
 pub const CHAT_REPRIORITIZE_SYSTEM_PROMPT: &str = r#"You are the user's AI Chief of Staff. The user wants to discuss or adjust today's plan.
@@ -118,15 +135,25 @@ pub fn format_goals_context(goals: &[(String, String, Option<String>)]) -> Strin
 }
 
 /// Format task context for the AI prompt
+///
+/// Each task tuple: (id, title, goal_title, due_date, deferral_count, parent_id, has_subtasks)
 pub fn format_tasks_context(
-    tasks: &[(String, String, Option<String>, Option<String>, i32)],
+    tasks: &[(
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        i32,
+        Option<String>,
+        bool,
+    )],
 ) -> String {
     if tasks.is_empty() {
         return "No pending tasks.".to_string();
     }
 
     let mut out = String::from("## Pending Tasks\n");
-    for (id, title, goal_title, due_date, deferral_count) in tasks {
+    for (id, title, goal_title, due_date, deferral_count, parent_id, has_subtasks) in tasks {
         let goal = goal_title.as_deref().unwrap_or("unassigned");
         let due = due_date.as_deref().unwrap_or("no deadline");
         let defer_note = if *deferral_count > 0 {
@@ -134,8 +161,18 @@ pub fn format_tasks_context(
         } else {
             String::new()
         };
+        let parent_note = if let Some(pid) = parent_id {
+            format!(" [SUBTASK of: {pid}]")
+        } else {
+            String::new()
+        };
+        let subtask_note = if *has_subtasks {
+            " [HAS SUBTASKS]".to_string()
+        } else {
+            String::new()
+        };
         out.push_str(&format!(
-            "- {title} (id: {id}, goal: {goal}, due: {due}){defer_note}\n"
+            "- {title} (id: {id}, goal: {goal}, due: {due}){defer_note}{parent_note}{subtask_note}\n"
         ));
     }
     out
@@ -201,9 +238,38 @@ mod tests {
             Some("Startup".into()),
             Some("2026-03-30".into()),
             4,
+            None,
+            false,
         )];
         let out = format_tasks_context(&tasks);
         assert!(out.contains("[DEFERRED 4x]"));
+    }
+
+    #[test]
+    fn test_format_tasks_with_subtask_annotations() {
+        let tasks = vec![
+            (
+                "t1".into(),
+                "Build landing page".into(),
+                Some("Startup".into()),
+                None,
+                2,
+                None,
+                true,
+            ),
+            (
+                "sub_hero".into(),
+                "Design hero section".into(),
+                Some("Startup".into()),
+                None,
+                0,
+                Some("t1".into()),
+                false,
+            ),
+        ];
+        let out = format_tasks_context(&tasks);
+        assert!(out.contains("[HAS SUBTASKS]"));
+        assert!(out.contains("[SUBTASK of: t1]"));
     }
 
     #[test]

@@ -93,11 +93,11 @@ export function UpdateNotification({
               Current version: {state.info.currentVersion}
             </p>
             <div className="mt-3 flex gap-2">
-              <Button onClick={onDownload} size="sm">
-                Download
-              </Button>
               <Button onClick={onDismiss} variant="outline" size="sm">
                 Later
+              </Button>
+              <Button onClick={onDownload} size="sm">
+                Download
               </Button>
             </div>
           </div>
@@ -145,12 +145,12 @@ export function UpdateNotification({
               Restart the application to apply the update.
             </p>
             <div className="mt-3 flex gap-2">
+              <Button onClick={onDismiss} variant="outline" size="sm">
+                Later
+              </Button>
               <Button onClick={onInstall} variant="success" size="sm">
                 <RefreshCw className="h-4 w-4" />
                 Restart Now
-              </Button>
-              <Button onClick={onDismiss} variant="outline" size="sm">
-                Later
               </Button>
             </div>
           </div>

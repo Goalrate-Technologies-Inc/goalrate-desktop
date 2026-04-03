@@ -101,6 +101,24 @@ pub async fn create_goal(
                         t.status.clone().unwrap_or_else(|| "todo".to_string()),
                     ),
                 );
+                if let Some(ref recurring) = t.recurring {
+                    map.insert(
+                        "recurring".into(),
+                        serde_yaml::Value::String(recurring.clone()),
+                    );
+                }
+                if let Some(ref start) = t.recurrence_start {
+                    map.insert(
+                        "recurrence_start".into(),
+                        serde_yaml::Value::String(start.clone()),
+                    );
+                }
+                if let Some(ref end) = t.recurrence_end {
+                    map.insert(
+                        "recurrence_end".into(),
+                        serde_yaml::Value::String(end.clone()),
+                    );
+                }
                 serde_yaml::Value::Mapping(map)
             })
             .collect();
@@ -199,6 +217,194 @@ pub async fn archive_goal(
 }
 
 /// Rename a domain (goal type) across all goals in a vault.
+/// A lightweight task entry returned from goal frontmatter
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalFrontmatterTask {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub parent_id: Option<String>,
+    pub recurring: Option<String>,
+    pub completed_at: Option<String>,
+}
+
+/// List tasks stored in a goal's YAML frontmatter
+#[tauri::command]
+pub async fn list_goal_frontmatter_tasks(
+    vault_id: String,
+    goal_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<GoalFrontmatterTask>, AppError> {
+    let vaults = state.vaults.lock().unwrap();
+    let manager = vaults
+        .get(&vault_id)
+        .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+
+    let (fm, _body) = manager.read_goal(&goal_id)?;
+    let tasks = fm
+        .get("tasks")
+        .and_then(|v| v.as_sequence())
+        .map(|seq| {
+            seq.iter()
+                .filter_map(|tv| {
+                    let id = tv.get("id").and_then(|v| v.as_str())?.to_string();
+                    let title = tv.get("title").and_then(|v| v.as_str())?.to_string();
+                    let status = tv
+                        .get("status")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("todo")
+                        .to_string();
+                    let parent_id = tv
+                        .get("parent_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let recurring = tv
+                        .get("recurring")
+                        .and_then(|v| {
+                            v.as_str().map(|s| s.to_string()).or_else(|| {
+                                v.as_bool()
+                                    .map(|b| if b { "true".to_string() } else { String::new() })
+                            })
+                        })
+                        .filter(|s| !s.is_empty());
+                    let completed_at = tv
+                        .get("completed_at")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    Some(GoalFrontmatterTask {
+                        id,
+                        title,
+                        status,
+                        parent_id,
+                        recurring,
+                        completed_at,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(tasks)
+}
+
+/// Add a new task to a goal's frontmatter
+#[tauri::command]
+pub async fn add_goal_frontmatter_task(
+    vault_id: String,
+    goal_id: String,
+    title: String,
+    parent_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<GoalFrontmatterTask, AppError> {
+    let vaults = state.vaults.lock().unwrap();
+    let manager = vaults
+        .get(&vault_id)
+        .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+
+    let (mut fm, body) = manager.read_goal(&goal_id)?;
+    let mut task_seq = fm
+        .get("tasks")
+        .and_then(|v| v.as_sequence().cloned())
+        .unwrap_or_default();
+
+    let task_id = format!(
+        "task_{}",
+        uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
+    );
+    let mut map = serde_yaml::Mapping::new();
+    map.insert("id".into(), serde_yaml::Value::String(task_id.clone()));
+    map.insert("title".into(), serde_yaml::Value::String(title.clone()));
+    map.insert(
+        "status".into(),
+        serde_yaml::Value::String("todo".to_string()),
+    );
+    if let Some(ref pid) = parent_id {
+        map.insert("parent_id".into(), serde_yaml::Value::String(pid.clone()));
+    }
+    task_seq.push(serde_yaml::Value::Mapping(map));
+    fm.insert("tasks".into(), serde_yaml::Value::Sequence(task_seq));
+    manager.write_goal(&goal_id, &fm, &body)?;
+
+    Ok(GoalFrontmatterTask {
+        id: task_id,
+        title,
+        status: "todo".to_string(),
+        parent_id,
+        recurring: None,
+        completed_at: None,
+    })
+}
+
+/// Update a task's title in a goal's frontmatter
+#[tauri::command]
+pub async fn update_goal_frontmatter_task(
+    vault_id: String,
+    goal_id: String,
+    task_id: String,
+    title: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let vaults = state.vaults.lock().unwrap();
+    let manager = vaults
+        .get(&vault_id)
+        .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+
+    let (mut fm, body) = manager.read_goal(&goal_id)?;
+    if let Some(task_seq) = fm.get_mut("tasks").and_then(|v| v.as_sequence_mut()) {
+        let found = task_seq.iter_mut().any(|tv| {
+            let matches = tv.get("id").and_then(|v| v.as_str()) == Some(&task_id);
+            if matches {
+                if let Some(map) = tv.as_mapping_mut() {
+                    map.insert("title".into(), serde_yaml::Value::String(title.clone()));
+                }
+            }
+            matches
+        });
+        if !found {
+            return Err(AppError::item_not_found("Task", &task_id));
+        }
+    } else {
+        return Err(AppError::item_not_found("Task", &task_id));
+    }
+
+    manager.write_goal(&goal_id, &fm, &body)?;
+    Ok(())
+}
+
+/// Delete a task from a goal's frontmatter
+#[tauri::command]
+pub async fn delete_goal_frontmatter_task(
+    vault_id: String,
+    goal_id: String,
+    task_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let vaults = state.vaults.lock().unwrap();
+    let manager = vaults
+        .get(&vault_id)
+        .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+
+    let (mut fm, body) = manager.read_goal(&goal_id)?;
+    if let Some(task_seq) = fm.get_mut("tasks").and_then(|v| v.as_sequence_mut()) {
+        let original_len = task_seq.len();
+        // Remove the task and any children that have it as parent_id
+        task_seq.retain(|tv| {
+            let tid = tv.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let pid = tv.get("parent_id").and_then(|v| v.as_str()).unwrap_or("");
+            tid != task_id && pid != task_id
+        });
+        if task_seq.len() == original_len {
+            return Err(AppError::item_not_found("Task", &task_id));
+        }
+    } else {
+        return Err(AppError::item_not_found("Task", &task_id));
+    }
+
+    manager.write_goal(&goal_id, &fm, &body)?;
+    Ok(())
+}
+
 /// Updates every goal where type == old_type to type = new_type.
 #[tauri::command]
 pub async fn rename_domain(

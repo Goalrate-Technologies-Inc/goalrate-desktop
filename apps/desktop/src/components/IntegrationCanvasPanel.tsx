@@ -9,35 +9,13 @@ import {
   type AiProviderOption,
 } from '../lib/aiGoalPlanning';
 import {
-  AzureOpenAiIcon,
-  BedrockIcon,
   AnthropicIcon,
-  GeminiIcon,
-  GitHubIcon,
-  GroqIcon,
-  MistralIcon,
-  OllamaIcon,
-  OpenRouterIcon,
   OpenAIIcon,
-  PerplexityIcon,
-  TogetherAiIcon,
-  VertexAiIcon,
 } from './IntegrationIcons';
 
-const PROVIDER_ICON_MAP: Record<string, typeof GitHubIcon> = {
-  github: GitHubIcon,
-  local: OllamaIcon,
+const PROVIDER_ICON_MAP: Record<string, typeof OpenAIIcon> = {
   openai: OpenAIIcon,
-  'azure-openai': AzureOpenAiIcon,
-  openrouter: OpenRouterIcon,
   anthropic: AnthropicIcon,
-  gemini: GeminiIcon,
-  'vertex-ai': VertexAiIcon,
-  mistral: MistralIcon,
-  groq: GroqIcon,
-  bedrock: BedrockIcon,
-  perplexity: PerplexityIcon,
-  together: TogetherAiIcon,
 };
 
 function orderProviders(providers: AiProviderOption[]): AiProviderOption[] {
@@ -55,33 +33,7 @@ function orderProviders(providers: AiProviderOption[]): AiProviderOption[] {
   return ordered;
 }
 
-function getProviderAccessMethods(provider: AiProviderOption): string[] {
-  const normalizedConnectionType = provider.connectionType.trim().toLowerCase();
-
-  if (provider.id === 'local' || normalizedConnectionType === 'local') {
-    return ['SDK'];
-  }
-
-  if (normalizedConnectionType.includes('sdk') && normalizedConnectionType.includes('api_key')) {
-    return ['SDK', 'API key'];
-  }
-
-  if (normalizedConnectionType.includes('sdk')) {
-    return ['SDK'];
-  }
-
-  if (normalizedConnectionType.includes('oauth') && normalizedConnectionType.includes('api_key')) {
-    return ['OAuth', 'API key'];
-  }
-
-  if (normalizedConnectionType.includes('oauth')) {
-    return ['OAuth'];
-  }
-
-  if (normalizedConnectionType.includes('api_key')) {
-    return ['API key'];
-  }
-
+function getProviderAccessMethods(_provider: AiProviderOption): string[] {
   return ['API key'];
 }
 
@@ -126,7 +78,7 @@ export function IntegrationCanvasPanel({
               AI Agents
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Connect with OAuth, API key, or SDK and add agents to the integrations rail.
+              Add your API key and add agents to the integrations rail.
             </p>
           </div>
           <Button type="button" size="sm" variant="outline" onClick={onClose}>

@@ -514,6 +514,16 @@ pub struct TaskCreate {
     pub title: String,
     #[serde(default)]
     pub status: Option<String>,
+    /// Recurrence frequency: daily, weekdays, weekly, monthly, yearly,
+    /// or custom like every_3_days, every_2_weeks
+    #[serde(default)]
+    pub recurring: Option<String>,
+    /// Date when recurrence begins (YYYY-MM-DD)
+    #[serde(default)]
+    pub recurrence_start: Option<String>,
+    /// Date when recurrence ends (YYYY-MM-DD)
+    #[serde(default)]
+    pub recurrence_end: Option<String>,
 }
 
 fn default_priority() -> String {
@@ -695,6 +705,16 @@ pub struct KeyResult {
     pub notes: Option<String>,
     #[serde(default)]
     pub publish_on_complete: bool,
+    /// Recurrence frequency: daily, weekdays, weekly, monthly, yearly,
+    /// or custom like every_3_days, every_2_weeks
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurring: Option<String>,
+    /// Date when recurrence begins (YYYY-MM-DD)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence_start: Option<String>,
+    /// Date when recurrence ends (YYYY-MM-DD)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence_end: Option<String>,
     pub created: String,
     pub updated: String,
 }
@@ -771,6 +791,10 @@ impl KeyResult {
             publish_on_complete: get_bool("publish_on_complete")
                 .or_else(|| get_bool("publishOnComplete"))
                 .unwrap_or(false),
+            recurring: get_str_opt("recurring"),
+            recurrence_start: get_str_opt("recurrence_start")
+                .or_else(|| get_str_opt("recurrenceStart")),
+            recurrence_end: get_str_opt("recurrence_end").or_else(|| get_str_opt("recurrenceEnd")),
             created: get_str_opt("created").unwrap_or_else(|| Utc::now().to_rfc3339()),
             updated: get_str_opt("updated").unwrap_or_else(|| Utc::now().to_rfc3339()),
         })

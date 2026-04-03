@@ -451,7 +451,15 @@ fn gather_vault_context(
 ) -> Result<
     (
         Vec<(String, String, Option<String>)>,
-        Vec<(String, String, Option<String>, Option<String>, i32)>,
+        Vec<(
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            i32,
+            Option<String>,
+            bool,
+        )>,
     ),
     AppError,
 > {
@@ -502,7 +510,24 @@ fn gather_vault_context(
 
     // For V1, tasks come from goal tasks in the vault
     // Each goal may have tasks in its frontmatter
+    // First pass: collect all tasks and track parent_id relationships
     let mut tasks = Vec::new();
+    let mut parent_ids_with_children: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+
+    // Pre-scan to find which tasks have subtasks (children with parent_id)
+    for (gid, _gtitle, _domain) in &goals {
+        if let Ok((fm, _body)) = vault.read_goal(gid) {
+            if let Some(task_list) = fm.get("tasks").and_then(|v| v.as_sequence()) {
+                for task_val in task_list {
+                    if let Some(pid) = task_val.get("parent_id").and_then(|v| v.as_str()) {
+                        parent_ids_with_children.insert(pid.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     for (gid, gtitle, _domain) in &goals {
         if let Ok((fm, _body)) = vault.read_goal(gid) {
             if let Some(task_list) = fm.get("tasks").and_then(|v| v.as_sequence()) {
@@ -525,12 +550,22 @@ fn gather_vault_context(
                         .get("status")
                         .and_then(|v| v.as_str())
                         .unwrap_or("todo");
+                    let parent_id = task_val
+                        .get("parent_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
 
                     // Check if task is completed and non-recurring
                     let completed_at = task_val.get("completed_at").and_then(|v| v.as_str());
                     let is_recurring = task_val
                         .get("recurring")
                         .and_then(|v| v.as_bool())
+                        .or_else(|| {
+                            task_val
+                                .get("recurring")
+                                .and_then(|v| v.as_str())
+                                .map(|s| !s.is_empty())
+                        })
                         .unwrap_or(false);
 
                     // Skip completed non-recurring tasks
@@ -559,7 +594,17 @@ fn gather_vault_context(
                                 .unwrap_or(0)
                         };
 
-                        tasks.push((tid, ttitle, Some(gtitle.clone()), due, deferral_count));
+                        let has_subtasks = parent_ids_with_children.contains(&tid);
+
+                        tasks.push((
+                            tid,
+                            ttitle,
+                            Some(gtitle.clone()),
+                            due,
+                            deferral_count,
+                            parent_id,
+                            has_subtasks,
+                        ));
                     }
                 }
             }
@@ -640,7 +685,7 @@ pub async fn daily_loop_generate_plan(
     // Track brand-new AI-generated tasks that need to be persisted to goal files
     let mut new_tasks: Vec<(String, String, String)> = Vec::new(); // (id, title, goal_id)
                                                                    // Track AI's recurring classification per task
-    let mut recurring_flags: std::collections::HashMap<String, bool> =
+    let mut recurring_flags: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
     if let Some(arr) = parsed.get("ordered_tasks").and_then(Value::as_array) {
         for item in arr {
@@ -654,7 +699,21 @@ pub async fn daily_loop_generate_plan(
                     sanitize_llm_text(item.get("title").and_then(Value::as_str).unwrap_or(""), 200);
                 let goal_id =
                     sanitize_task_id(item.get("goal_id").and_then(Value::as_str).unwrap_or(""));
-                let recurring = item.get("recurring").and_then(Value::as_bool);
+                // Accept both string ("daily") and bool (true→"daily", false→"none") for backwards compat
+                let recurring = item
+                    .get("recurring")
+                    .and_then(|v| {
+                        v.as_str().map(|s| s.to_string()).or_else(|| {
+                            v.as_bool().map(|b| {
+                                if b {
+                                    "daily".to_string()
+                                } else {
+                                    "none".to_string()
+                                }
+                            })
+                        })
+                    })
+                    .filter(|s| s != "none");
                 if !id.is_empty() {
                     if !title.is_empty() {
                         task_titles.insert(id.clone(), title.clone());
@@ -782,8 +841,11 @@ pub async fn daily_loop_generate_plan(
                                 "status".into(),
                                 serde_yaml::Value::String("todo".to_string()),
                             );
-                            if let Some(&recurring) = recurring_flags.get(tid) {
-                                map.insert("recurring".into(), serde_yaml::Value::Bool(recurring));
+                            if let Some(recurring) = recurring_flags.get(tid) {
+                                map.insert(
+                                    "recurring".into(),
+                                    serde_yaml::Value::String(recurring.clone()),
+                                );
                             }
                             task_seq.push(serde_yaml::Value::Mapping(map));
                         }
@@ -816,13 +878,13 @@ pub async fn daily_loop_generate_plan(
                             let mut changed = false;
                             for task_val in tasks_seq.iter_mut() {
                                 let tid = task_val.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                                if let Some(&recurring) = recurring_flags.get(tid) {
+                                if let Some(recurring) = recurring_flags.get(tid) {
                                     if let Some(map) = task_val.as_mapping_mut() {
                                         // Only write if not already set
                                         if !map.contains_key("recurring") {
                                             map.insert(
                                                 "recurring".into(),
-                                                serde_yaml::Value::Bool(recurring),
+                                                serde_yaml::Value::String(recurring.clone()),
                                             );
                                             changed = true;
                                         }
@@ -843,6 +905,141 @@ pub async fn daily_loop_generate_plan(
         }
     }
 
+    // Persist AI-generated subtask breakdowns for deferred tasks
+    let task_breakdowns: Vec<(String, Vec<(String, String)>)> = parsed
+        .get("task_breakdowns")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|b| {
+                    let task_id =
+                        sanitize_task_id(b.get("task_id").and_then(Value::as_str).unwrap_or(""));
+                    let subtasks: Vec<(String, String)> = b
+                        .get("subtasks")
+                        .and_then(Value::as_array)
+                        .map(|subs| {
+                            subs.iter()
+                                .filter_map(|s| {
+                                    let sid = sanitize_task_id(
+                                        s.get("id").and_then(Value::as_str).unwrap_or(""),
+                                    );
+                                    let stitle = sanitize_llm_text(
+                                        s.get("title").and_then(Value::as_str).unwrap_or(""),
+                                        200,
+                                    );
+                                    if !sid.is_empty() && !stitle.is_empty() {
+                                        Some((sid, stitle))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if !task_id.is_empty() && !subtasks.is_empty() {
+                        Some((task_id, subtasks))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if !task_breakdowns.is_empty() {
+        // Build a map of task_id → goal_id from the vault context
+        let task_to_goal: std::collections::HashMap<String, String> = {
+            let vaults_guard = app_state
+                .vaults
+                .lock()
+                .map_err(|e| AppError::new(ErrorCode::UnknownError, format!("Lock error: {e}")))?;
+            let vault = vaults_guard
+                .get(&vault_id)
+                .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+            let mut map = std::collections::HashMap::new();
+            for gid in vault.list_goals().unwrap_or_default() {
+                if let Ok((fm, _)) = vault.read_goal(&gid) {
+                    if let Some(task_list) = fm.get("tasks").and_then(|v| v.as_sequence()) {
+                        for tv in task_list {
+                            if let Some(tid) = tv.get("id").and_then(|v| v.as_str()) {
+                                map.insert(tid.to_string(), gid.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            map
+        };
+
+        // Group subtasks by goal_id
+        let mut subtasks_by_goal: std::collections::HashMap<String, Vec<(String, String, String)>> =
+            std::collections::HashMap::new(); // goal_id → [(sub_id, sub_title, parent_id)]
+        for (parent_id, subtasks) in &task_breakdowns {
+            if let Some(gid) = task_to_goal.get(parent_id) {
+                for (sid, stitle) in subtasks {
+                    subtasks_by_goal.entry(gid.clone()).or_default().push((
+                        sid.clone(),
+                        stitle.clone(),
+                        parent_id.clone(),
+                    ));
+                    // Also store subtask titles for the plan
+                    task_titles.insert(sid.clone(), stitle.clone());
+                }
+            }
+        }
+
+        // Persist subtasks to vault
+        if let Ok(vaults_guard) = app_state.vaults.lock() {
+            if let Some(vault) = vaults_guard.get(&vault_id) {
+                for (gid, new_subtasks) in &subtasks_by_goal {
+                    if let Ok((mut fm, body)) = vault.read_goal(gid) {
+                        let mut task_seq = fm
+                            .get("tasks")
+                            .and_then(|v| v.as_sequence().cloned())
+                            .unwrap_or_default();
+
+                        // Collect existing subtask IDs to avoid duplicates
+                        let existing_ids: std::collections::HashSet<String> = task_seq
+                            .iter()
+                            .filter_map(|tv| {
+                                tv.get("id").and_then(|v| v.as_str()).map(|s| s.to_string())
+                            })
+                            .collect();
+
+                        for (sid, stitle, parent_id) in new_subtasks {
+                            if existing_ids.contains(sid) {
+                                continue;
+                            }
+                            let mut map = serde_yaml::Mapping::new();
+                            map.insert("id".into(), serde_yaml::Value::String(sid.clone()));
+                            map.insert("title".into(), serde_yaml::Value::String(stitle.clone()));
+                            map.insert(
+                                "status".into(),
+                                serde_yaml::Value::String("todo".to_string()),
+                            );
+                            map.insert(
+                                "parent_id".into(),
+                                serde_yaml::Value::String(parent_id.clone()),
+                            );
+                            task_seq.push(serde_yaml::Value::Mapping(map));
+                        }
+                        fm.insert("tasks".into(), serde_yaml::Value::Sequence(task_seq));
+                        if let Err(e) = vault.write_goal(gid, &fm, &body) {
+                            log::warn!("Failed to persist subtask breakdowns to goal {gid}: {e}");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Merge subtask titles into DB so they survive app restarts
+        if !task_titles.is_empty() {
+            let _ = with_db(&vault_id, &app_state, |db| {
+                db.merge_task_titles(&plan.id, &task_titles)
+            });
+        }
+    }
+
     Ok(GeneratedPlanResponse {
         plan,
         outcomes,
@@ -851,6 +1048,191 @@ pub async fn daily_loop_generate_plan(
         deferrals_confrontation,
         task_titles,
     })
+}
+
+/// Assess goal priority using AI based on the goal's title, domain, and deadline.
+/// Returns one of: "critical", "high", "medium", "low".
+#[tauri::command]
+pub async fn assess_goal_priority(
+    model_id: String,
+    title: String,
+    domain: Option<String>,
+    deadline: Option<String>,
+    app_state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let system_prompt = "You are a goal prioritization assistant. Given a goal's title, domain, and deadline, assess its priority. Return ONLY one word: critical, high, medium, or low.\n\nGuidelines:\n- critical: urgent blockers, imminent deadlines (within days), safety/health emergencies\n- high: important goals with near deadlines (within 1-2 weeks), high-impact objectives\n- medium: standard goals with reasonable timelines, steady progress items\n- low: nice-to-haves, distant deadlines (months away), exploratory goals";
+
+    let mut user_prompt = format!("Goal: {}", title.trim());
+    if let Some(ref d) = domain {
+        user_prompt.push_str(&format!("\nDomain: {}", d.trim()));
+    }
+    if let Some(ref dl) = deadline {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        user_prompt.push_str(&format!("\nDeadline: {} (today is {})", dl.trim(), today));
+    }
+
+    let raw = call_llm_text(&model_id, system_prompt, &user_prompt, 10, Some(&app_state)).await?;
+    let priority = raw.trim().to_lowercase();
+
+    // Validate and return
+    match priority.as_str() {
+        "critical" | "high" | "medium" | "low" => Ok(priority),
+        _ => {
+            // Try to extract a valid priority from the response
+            for p in &["critical", "high", "medium", "low"] {
+                if priority.contains(p) {
+                    return Ok(p.to_string());
+                }
+            }
+            Ok("medium".to_string())
+        }
+    }
+}
+
+/// Generate initial tasks for a newly created goal that has no tasks.
+/// Reads sibling goals in the same domain for context, calls the LLM,
+/// and persists the generated tasks directly to the goal's frontmatter.
+#[tauri::command]
+pub async fn generate_goal_tasks(
+    vault_id: String,
+    goal_id: String,
+    model_id: String,
+    title: String,
+    domain: Option<String>,
+    deadline: Option<String>,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    // Gather sibling goals in the same domain for context
+    let sibling_context = {
+        let vaults = app_state
+            .vaults
+            .lock()
+            .map_err(|e| AppError::new(ErrorCode::UnknownError, format!("Lock error: {e}")))?;
+        let vault = vaults
+            .get(&vault_id)
+            .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+
+        let mut siblings = Vec::new();
+        for gid in vault.list_goals().unwrap_or_default() {
+            if gid == goal_id {
+                continue;
+            }
+            if let Ok((fm, _)) = vault.read_goal(&gid) {
+                let g_domain = fm
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| {
+                        fm.get("tags")
+                            .and_then(|v| v.as_sequence())
+                            .and_then(|s| s.first())
+                            .and_then(|v| v.as_str())
+                    })
+                    .unwrap_or("");
+                // Include goals from the same domain
+                if domain
+                    .as_deref()
+                    .is_some_and(|d| d.eq_ignore_ascii_case(g_domain))
+                {
+                    let g_title = fm
+                        .get("title")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if !g_title.is_empty() {
+                        siblings.push(g_title);
+                    }
+                }
+            }
+        }
+        siblings
+    };
+
+    let system_prompt = r#"You are a goal planning assistant. Given a goal, generate 3-5 concrete, actionable tasks that would help achieve it. Each task should be completable in one day.
+
+Return ONLY a JSON array of task title strings. Example:
+["Research competitor pricing models", "Draft initial feature list", "Set up project tracking board"]
+
+Rules:
+- Tasks must be specific and actionable, not vague
+- Each task should be achievable in a single focused work session
+- Order tasks by logical sequence (what should be done first)
+- Consider the goal's domain and any sibling goals for context
+- Do NOT include task IDs or metadata — just title strings"#;
+
+    let mut user_prompt = format!("Goal: {}", title.trim());
+    if let Some(ref d) = domain {
+        user_prompt.push_str(&format!("\nDomain: {}", d.trim()));
+    }
+    if let Some(ref dl) = deadline {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        user_prompt.push_str(&format!("\nDeadline: {} (today is {})", dl.trim(), today));
+    }
+    if !sibling_context.is_empty() {
+        user_prompt.push_str("\n\nOther goals in this domain:");
+        for s in &sibling_context {
+            user_prompt.push_str(&format!("\n- {s}"));
+        }
+    }
+
+    let raw = call_llm(
+        &model_id,
+        system_prompt,
+        &user_prompt,
+        500,
+        Some(&app_state),
+    )
+    .await?;
+    let json_str = extract_json(&raw);
+
+    let task_titles: Vec<String> = serde_json::from_str(json_str)
+        .map(|arr: Vec<String>| {
+            arr.into_iter()
+                .map(|s| sanitize_llm_text(&s, 200))
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if task_titles.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Persist tasks to goal frontmatter
+    {
+        let vaults = app_state
+            .vaults
+            .lock()
+            .map_err(|e| AppError::new(ErrorCode::UnknownError, format!("Lock error: {e}")))?;
+        let vault = vaults
+            .get(&vault_id)
+            .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+
+        let (mut fm, body) = vault.read_goal(&goal_id)?;
+        let mut task_seq = fm
+            .get("tasks")
+            .and_then(|v| v.as_sequence().cloned())
+            .unwrap_or_default();
+
+        for title in &task_titles {
+            let task_id = format!(
+                "task_{}",
+                uuid::Uuid::new_v4().to_string().replace('-', "")[..8].to_string()
+            );
+            let mut map = serde_yaml::Mapping::new();
+            map.insert("id".into(), serde_yaml::Value::String(task_id));
+            map.insert("title".into(), serde_yaml::Value::String(title.clone()));
+            map.insert(
+                "status".into(),
+                serde_yaml::Value::String("todo".to_string()),
+            );
+            task_seq.push(serde_yaml::Value::Mapping(map));
+        }
+
+        fm.insert("tasks".into(), serde_yaml::Value::Sequence(task_seq));
+        vault.write_goal(&goal_id, &fm, &body)?;
+    }
+
+    Ok(task_titles)
 }
 
 #[tauri::command]
@@ -881,15 +1263,21 @@ pub async fn daily_loop_chat_reprioritize(
         ctx.push('\n');
 
         // Include task details so the AI knows what task IDs mean
-        // Tuple: (task_id, task_title, goal_title, due_date, deferral_count)
         if !tasks.is_empty() {
             ctx.push_str("## Available Tasks\n");
-            for (tid, title, goal_title, due_date, deferral_count) in &tasks {
+            for (tid, title, goal_title, due_date, deferral_count, parent_id, has_subtasks) in
+                &tasks
+            {
                 let goal_ref = goal_title.as_deref().unwrap_or("unlinked");
                 let due = due_date.as_deref().unwrap_or("none");
+                let parent_note = parent_id
+                    .as_ref()
+                    .map(|p| format!(", subtask of: {p}"))
+                    .unwrap_or_default();
+                let subtask_note = if *has_subtasks { ", has subtasks" } else { "" };
                 ctx.push_str(&format!(
-                    "- {} (id: {}, goal: {}, due: {}, deferrals: {})\n",
-                    title, tid, goal_ref, due, deferral_count
+                    "- {} (id: {}, goal: {}, due: {}, deferrals: {}{}{})\n",
+                    title, tid, goal_ref, due, deferral_count, parent_note, subtask_note
                 ));
             }
             ctx.push('\n');

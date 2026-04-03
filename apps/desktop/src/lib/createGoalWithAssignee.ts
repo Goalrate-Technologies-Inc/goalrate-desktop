@@ -1431,6 +1431,9 @@ export async function createGoalWithAssignee(
     });
     const resolvedTitle = requestedTitle || plan.title;
 
+    // Use AI-assessed priority if available, otherwise keep user's original
+    const resolvedPriority = plan.priority || priority;
+
     await invoke('update_goal', {
       vaultId,
       goalId: created.id,
@@ -1438,7 +1441,7 @@ export async function createGoalWithAssignee(
         title: resolvedTitle,
         description,
         deadline,
-        priority,
+        priority: resolvedPriority,
       },
     });
 

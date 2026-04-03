@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   Target, FolderKanban, Rocket, Heart, Dumbbell, GraduationCap,
   Briefcase, Home, Palette, Plus, Pencil, Archive, Trash2, FileText, X,
-  ArrowUp, ArrowRight, ArrowDown,
+  ArrowUp, ArrowRight, ArrowDown, Check, Repeat, CircleDot,
   type LucideIcon,
 } from 'lucide-react';
 import { useVault } from '../../context/VaultContext';
@@ -71,6 +71,15 @@ interface ConfirmState {
   onConfirm: () => void;
 }
 
+interface GoalFrontmatterTask {
+  id: string;
+  title: string;
+  status: string;
+  parentId?: string | null;
+  recurring?: string | null;
+  completedAt?: string | null;
+}
+
 interface DomainSidebarProps {
   dataVersion?: number;
   onMutation?: () => void;
@@ -96,9 +105,12 @@ export function DomainSidebar({ dataVersion = 0, onMutation }: DomainSidebarProp
   const [newGoalDomain, setNewGoalDomain] = useState('');
   const [newDomainName, setNewDomainName] = useState('');
   const [newGoalDeadline, setNewGoalDeadline] = useState('');
-  const [newGoalPriority, setNewGoalPriority] = useState('medium');
+
   const [editingNotes, setEditingNotes] = useState<{ goalId: string; title: string; notes: string } | null>(null);
-  const [viewingNotes, setViewingNotes] = useState<{ goalId: string; title: string; notes: string } | null>(null);
+  const [viewingNotes, setViewingNotes] = useState<{ goalId: string; title: string; notes: string; tasks: GoalFrontmatterTask[] } | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState('');
 
   const editInputRef = useRef<HTMLInputElement>(null);
   const addTitleRef = useRef<HTMLInputElement>(null);
@@ -257,13 +269,13 @@ export function DomainSidebar({ dataVersion = 0, onMutation }: DomainSidebarProp
     const domain = newGoalDomain === '__other__' ? newDomainName.trim() : newGoalDomain;
     if (!domain) {return;}
     try {
-      await invoke('create_goal', {
+      const created = await invoke<{ id: string }>('create_goal', {
         vaultId,
         data: {
           title: newGoalTitle.trim(),
           goalType: domain,
           deadline: newGoalDeadline || undefined,
-          priority: newGoalPriority,
+          priority: 'medium',
           tags: [domain],
         },
       });
@@ -272,18 +284,63 @@ export function DomainSidebar({ dataVersion = 0, onMutation }: DomainSidebarProp
       setNewGoalDomain('');
       setNewDomainName('');
       setNewGoalDeadline('');
-      setNewGoalPriority('medium');
       mutate();
+
+      // AI enrichment in the background — don't block the UI
+      if (created?.id) {
+        const goalTitle = newGoalTitle.trim();
+        const goalDeadline = newGoalDeadline || null;
+        const goalId = created.id;
+        const aiModel = 'anthropic::claude-sonnet-4-5-20250929';
+
+        // Run priority assessment and task generation concurrently
+        Promise.allSettled([
+          // Assess priority
+          invoke<string>('assess_goal_priority', {
+            modelId: aiModel,
+            title: goalTitle,
+            domain,
+            deadline: goalDeadline,
+          }).then(async (priority) => {
+            if (priority && priority !== 'medium') {
+              await invoke('update_goal', {
+                vaultId,
+                goalId,
+                data: { priority },
+              });
+            }
+          }),
+          // Generate initial tasks
+          invoke<string[]>('generate_goal_tasks', {
+            vaultId,
+            goalId,
+            modelId: aiModel,
+            title: goalTitle,
+            domain,
+            deadline: goalDeadline,
+          }),
+        ]).then((results) => {
+          for (const result of results) {
+            if (result.status === 'rejected') {
+              console.warn('AI goal enrichment failed:', result.reason);
+            }
+          }
+          mutate();
+        });
+      }
     } catch (err) {
       console.error('Failed to create goal:', err);
     }
-  }, [vaultId, newGoalTitle, newGoalDomain, newDomainName, newGoalDeadline, newGoalPriority, mutate]);
+  }, [vaultId, newGoalTitle, newGoalDomain, newDomainName, newGoalDeadline, mutate]);
 
   const handleViewGoal = useCallback(async (goalId: string, title: string) => {
     if (!vaultId) {return;}
     try {
-      const goal = await invoke<{ notes?: string }>('get_goal', { vaultId, goalId });
-      setViewingNotes({ goalId, title, notes: goal.notes ?? '' });
+      const [goal, tasks] = await Promise.all([
+        invoke<{ notes?: string }>('get_goal', { vaultId, goalId }),
+        invoke<GoalFrontmatterTask[]>('list_goal_frontmatter_tasks', { vaultId, goalId }),
+      ]);
+      setViewingNotes({ goalId, title, notes: goal.notes ?? '', tasks: tasks ?? [] });
     } catch (err) {
       console.error('Failed to load goal:', err);
     }
@@ -313,6 +370,60 @@ export function DomainSidebar({ dataVersion = 0, onMutation }: DomainSidebarProp
       console.error('Failed to save goal notes:', err);
     }
   }, [vaultId, editingNotes, mutate]);
+
+  // ── Task CRUD helpers (operate on viewingNotes state) ──
+
+  const refreshViewingTasks = useCallback(async (goalId: string) => {
+    if (!vaultId) {return;}
+    const tasks = await invoke<GoalFrontmatterTask[]>('list_goal_frontmatter_tasks', { vaultId, goalId });
+    setViewingNotes((prev) => prev ? { ...prev, tasks: tasks ?? [] } : prev);
+  }, [vaultId]);
+
+  const handleAddTask = useCallback(async () => {
+    if (!vaultId || !viewingNotes || !newTaskTitle.trim()) {return;}
+    try {
+      await invoke('add_goal_frontmatter_task', {
+        vaultId,
+        goalId: viewingNotes.goalId,
+        title: newTaskTitle.trim(),
+      });
+      setNewTaskTitle('');
+      await refreshViewingTasks(viewingNotes.goalId);
+    } catch (err) {
+      console.error('Failed to add task:', err);
+    }
+  }, [vaultId, viewingNotes, newTaskTitle, refreshViewingTasks]);
+
+  const handleSaveTaskEdit = useCallback(async (taskId: string) => {
+    if (!vaultId || !viewingNotes || !editingTaskTitle.trim()) {return;}
+    try {
+      await invoke('update_goal_frontmatter_task', {
+        vaultId,
+        goalId: viewingNotes.goalId,
+        taskId,
+        title: editingTaskTitle.trim(),
+      });
+      setEditingTaskId(null);
+      setEditingTaskTitle('');
+      await refreshViewingTasks(viewingNotes.goalId);
+    } catch (err) {
+      console.error('Failed to update task:', err);
+    }
+  }, [vaultId, viewingNotes, editingTaskTitle, refreshViewingTasks]);
+
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    if (!vaultId || !viewingNotes) {return;}
+    try {
+      await invoke('delete_goal_frontmatter_task', {
+        vaultId,
+        goalId: viewingNotes.goalId,
+        taskId,
+      });
+      await refreshViewingTasks(viewingNotes.goalId);
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+    }
+  }, [vaultId, viewingNotes, refreshViewingTasks]);
 
   // ── Context menu builders ───────────────────────────────
 
@@ -559,25 +670,8 @@ export function DomainSidebar({ dataVersion = 0, onMutation }: DomainSidebarProp
             className="w-full rounded border border-border bg-transparent px-2 py-1 text-sm"
             style={{ color: 'var(--text-primary)' }}
           />
-          <select
-            value={newGoalPriority}
-            onChange={(e) => setNewGoalPriority(e.target.value)}
-            className="w-full rounded border border-border bg-transparent px-2 py-1 text-sm"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            <option value="low">Low priority</option>
-            <option value="medium">Medium priority</option>
-            <option value="high">High priority</option>
-          </select>
+
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleAddGoal}
-              disabled={!newGoalTitle.trim() || (!newGoalDomain || (newGoalDomain === '__other__' && !newDomainName.trim()))}
-              className="flex-1 rounded-md bg-text-primary px-2 py-1 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-            >
-              Add Goal
-            </button>
             <button
               type="button"
               onClick={() => {
@@ -586,12 +680,19 @@ export function DomainSidebar({ dataVersion = 0, onMutation }: DomainSidebarProp
                 setNewGoalDomain('');
                 setNewDomainName('');
                 setNewGoalDeadline('');
-                setNewGoalPriority('medium');
               }}
               className="rounded-md border border-border px-2 py-1 text-sm transition-colors hover:bg-surface-warm"
               style={{ color: 'var(--text-secondary)' }}
             >
               Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleAddGoal}
+              disabled={!newGoalTitle.trim() || (!newGoalDomain || (newGoalDomain === '__other__' && !newDomainName.trim()))}
+              className="flex-1 rounded-md bg-text-primary px-2 py-1 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              Add Goal
             </button>
           </div>
         </div>
@@ -669,6 +770,7 @@ export function DomainSidebar({ dataVersion = 0, onMutation }: DomainSidebarProp
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
+              {/* Notes section */}
               {viewingNotes.notes ? (
                 <div className="prose max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{viewingNotes.notes}</ReactMarkdown>
@@ -676,6 +778,139 @@ export function DomainSidebar({ dataVersion = 0, onMutation }: DomainSidebarProp
               ) : (
                 <p className="italic text-text-muted">No notes yet. Click the pencil icon to add notes.</p>
               )}
+
+              {/* Tasks section */}
+              {(() => {
+                const parentTasks = viewingNotes.tasks.filter((t) => !t.parentId);
+                const childrenOf = (parentId: string): GoalFrontmatterTask[] =>
+                  viewingNotes.tasks.filter((t) => t.parentId === parentId);
+
+                const renderTaskRow = (task: GoalFrontmatterTask, isSubtask: boolean): React.ReactNode => {
+                  const isDone = task.status === 'done' || !!task.completedAt;
+                  const isEditing = editingTaskId === task.id;
+
+                  if (isEditing) {
+                    return (
+                      <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+                        <input
+                          type="text"
+                          value={editingTaskTitle}
+                          onChange={(e) => setEditingTaskTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {handleSaveTaskEdit(task.id);}
+                            if (e.key === 'Escape') {setEditingTaskId(null); setEditingTaskTitle('');}
+                          }}
+                          className="flex-1 rounded border border-border bg-transparent px-2 py-0.5 text-sm focus:border-accent-goals focus:outline-none"
+                          ref={(el) => el?.focus()}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveTaskEdit(task.id)}
+                          className="rounded p-1 text-progress-high transition-colors hover:bg-surface-warm"
+                          title="Save"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setEditingTaskId(null); setEditingTaskTitle(''); }}
+                          className="rounded p-1 text-text-muted transition-colors hover:bg-surface-warm"
+                          title="Cancel"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="group flex items-center gap-2 rounded-md px-2 py-1.5">
+                      {isSubtask ? (
+                        <CircleDot className={`h-3 w-3 shrink-0 ${isDone ? 'text-progress-high' : 'text-border'}`} />
+                      ) : (
+                        <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                          isDone
+                            ? 'border-progress-high bg-progress-high text-white'
+                            : 'border-border'
+                        }`}>
+                          {isDone && <Check className="h-3 w-3" />}
+                        </div>
+                      )}
+                      <span className={`flex-1 text-sm ${isDone ? 'text-text-muted line-through' : isSubtask ? 'text-text-secondary' : 'text-text-primary'}`}>
+                        {task.title}
+                      </span>
+                      {task.recurring && (
+                        <Repeat className="h-3 w-3 shrink-0 text-text-muted" title={`Recurring: ${task.recurring}`} />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => { setEditingTaskId(task.id); setEditingTaskTitle(task.title); }}
+                        className="invisible rounded p-1 text-text-muted transition-colors hover:bg-surface-warm hover:text-text-secondary group-hover:visible"
+                        title="Edit task"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTask(task.id)}
+                        className="invisible rounded p-1 text-text-muted transition-colors hover:bg-surface-warm hover:text-red-500 group-hover:visible"
+                        title="Delete task"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                };
+
+                return (
+                  <div className={viewingNotes.notes || viewingNotes.tasks.length > 0 ? 'mt-6 border-t border-border-light pt-6' : ''}>
+                    <h4 className="mb-3 font-mono text-xs font-medium uppercase tracking-wider text-text-muted">
+                      Tasks {viewingNotes.tasks.length > 0 && `(${viewingNotes.tasks.length})`}
+                    </h4>
+                    {parentTasks.length > 0 && (
+                      <ul className="space-y-1">
+                        {parentTasks.map((task) => {
+                          const subtasks = childrenOf(task.id);
+                          return (
+                            <li key={task.id}>
+                              {renderTaskRow(task, false)}
+                              {subtasks.length > 0 && (
+                                <ul className="ml-6 space-y-0.5">
+                                  {subtasks.map((sub) => (
+                                    <li key={sub.id}>
+                                      {renderTaskRow(sub, true)}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    <div className="mt-2 flex items-center gap-2 px-2">
+                      <Plus className="h-4 w-4 shrink-0 text-text-muted" />
+                      <input
+                        type="text"
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') {handleAddTask();} }}
+                        placeholder="Add a task..."
+                        className="flex-1 bg-transparent py-1 text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
+                      />
+                      {newTaskTitle.trim() && (
+                        <button
+                          type="button"
+                          onClick={handleAddTask}
+                          className="rounded px-2 py-0.5 text-xs font-medium text-text-inverse bg-text-primary hover:opacity-90"
+                        >
+                          Add
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

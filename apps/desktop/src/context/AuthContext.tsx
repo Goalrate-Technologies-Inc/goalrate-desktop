@@ -81,6 +81,15 @@ export function AuthProvider({ children }: AuthProviderProps): React.ReactElemen
    */
   useEffect(() => {
     const initAuth = async (): Promise<void> => {
+      // If running outside Tauri (e.g. plain browser), skip keychain access
+      if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+        setState({
+          ...defaultAuthState,
+          isLoading: false,
+          mode: 'anonymous',
+        });
+        return;
+      }
       try {
         // Check for existing tokens in keychain
         const tokens = await invoke<StoredTokens | null>('get_tokens');

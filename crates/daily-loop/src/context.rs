@@ -65,7 +65,15 @@ impl ContextPayload {
 pub fn build_context(
     db: &DailyLoopDb,
     goals: &[(String, String, Option<String>)],
-    tasks: &[(String, String, Option<String>, Option<String>, i32)],
+    tasks: &[(
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        i32,
+        Option<String>,
+        bool,
+    )],
 ) -> DailyLoopResult<ContextPayload> {
     let goals_context = prompts::format_goals_context(goals);
     let tasks_context = prompts::format_tasks_context(tasks);

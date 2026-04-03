@@ -103,6 +103,11 @@ function extractErrorMessage(err: unknown): string {
   return 'Unknown error';
 }
 
+/** Check if running inside the Tauri desktop shell */
+function isTauriAvailable(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
 function initializeEmptyBoardColumns(vaultId: string): void {
   if (typeof window === 'undefined' || !vaultId) {
     return;
@@ -136,6 +141,7 @@ export function VaultProvider({ children }: VaultProviderProps): React.ReactElem
    * Refresh the list of known vaults
    */
   const refreshVaults = useCallback(async (): Promise<void> => {
+    if (!isTauriAvailable()) {return;}
     try {
       const list = await invoke<VaultListItem[]>('list_vaults');
       setVaults(list);
@@ -151,6 +157,9 @@ export function VaultProvider({ children }: VaultProviderProps): React.ReactElem
   useEffect(() => {
     let cancelled = false;
     async function init(): Promise<void> {
+      if (!isTauriAvailable()) {
+        return;
+      }
       try {
         const list = await invoke<VaultListItem[]>('list_vaults');
         if (cancelled) {return;}
@@ -193,6 +202,13 @@ export function VaultProvider({ children }: VaultProviderProps): React.ReactElem
   ): Promise<VaultConfig> => {
     setIsLoading(true);
     setError(null);
+
+    if (!isTauriAvailable()) {
+      const message = 'Vault operations require the GoalRate desktop app';
+      setError(message);
+      setIsLoading(false);
+      throw new Error(message);
+    }
 
     try {
       const data: Record<string, string> = { name, vaultType };

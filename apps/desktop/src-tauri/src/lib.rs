@@ -20,7 +20,8 @@ use commands::daily_loop::{
     daily_loop_toggle_task_completion, daily_loop_update_outcome, daily_loop_update_plan,
 };
 use commands::daily_loop_ai::{
-    daily_loop_chat_reprioritize, daily_loop_generate_plan, daily_loop_generate_summary,
+    assess_goal_priority, daily_loop_chat_reprioritize, daily_loop_generate_plan,
+    daily_loop_generate_summary, generate_goal_tasks,
 };
 use commands::focus::{
     complete_focus_item, defer_focus_item, focus_list_close_day, focus_list_generate,
@@ -32,19 +33,13 @@ use commands::goal_milestones::{
     move_goal_task, update_goal_task,
 };
 use commands::goals::{
-    archive_goal, create_goal, delete_goal, get_goal, list_goals, migrate_goal_frontmatter,
-    rename_domain, update_goal,
+    add_goal_frontmatter_task, archive_goal, create_goal, delete_goal,
+    delete_goal_frontmatter_task, get_goal, list_goal_frontmatter_tasks, list_goals,
+    migrate_goal_frontmatter, rename_domain, update_goal, update_goal_frontmatter_task,
 };
 use commands::integrations::{
-    check_api_keys, clear_anthropic_api_key, clear_azure_openai_api_key, clear_gemini_api_key,
-    clear_github_api_key, clear_groq_api_key, clear_mistral_api_key, clear_ollama_api_key,
-    clear_openai_api_key, clear_openrouter_api_key, clear_perplexity_api_key,
-    clear_together_api_key, complete_integration_oauth, disconnect_integration,
-    generate_integration_goal_plan, list_available_ai_models, list_integration_connections,
-    list_integration_tasks, set_anthropic_api_key, set_azure_openai_api_key, set_gemini_api_key,
-    set_github_api_key, set_groq_api_key, set_mistral_api_key, set_ollama_api_key,
-    set_openai_api_key, set_openrouter_api_key, set_perplexity_api_key, set_together_api_key,
-    start_integration_oauth, wait_for_integration_oauth,
+    check_api_keys, clear_anthropic_api_key, clear_openai_api_key, generate_integration_goal_plan,
+    list_available_ai_models, set_anthropic_api_key, set_openai_api_key,
 };
 use commands::project_tasks::{
     complete_project_task, create_project_task, delete_project_task, get_project_task,
@@ -144,6 +139,10 @@ pub fn run() {
             archive_goal,
             rename_domain,
             migrate_goal_frontmatter,
+            list_goal_frontmatter_tasks,
+            add_goal_frontmatter_task,
+            update_goal_frontmatter_task,
+            delete_goal_frontmatter_task,
             // Goal task commands
             list_goal_tasks,
             get_goal_task,
@@ -205,38 +204,16 @@ pub fn run() {
             daily_loop_generate_plan,
             daily_loop_chat_reprioritize,
             daily_loop_generate_summary,
+            assess_goal_priority,
+            generate_goal_tasks,
             // Integration commands
-            start_integration_oauth,
-            complete_integration_oauth,
-            wait_for_integration_oauth,
-            list_integration_connections,
-            disconnect_integration,
-            list_integration_tasks,
             list_available_ai_models,
             generate_integration_goal_plan,
             check_api_keys,
-            set_github_api_key,
-            clear_github_api_key,
-            set_anthropic_api_key,
-            clear_anthropic_api_key,
-            set_ollama_api_key,
-            clear_ollama_api_key,
             set_openai_api_key,
             clear_openai_api_key,
-            set_gemini_api_key,
-            clear_gemini_api_key,
-            set_mistral_api_key,
-            clear_mistral_api_key,
-            set_perplexity_api_key,
-            clear_perplexity_api_key,
-            set_openrouter_api_key,
-            clear_openrouter_api_key,
-            set_groq_api_key,
-            clear_groq_api_key,
-            set_azure_openai_api_key,
-            clear_azure_openai_api_key,
-            set_together_api_key,
-            clear_together_api_key,
+            set_anthropic_api_key,
+            clear_anthropic_api_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
