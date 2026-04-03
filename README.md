@@ -81,8 +81,6 @@ pnpm run rust:fmt
 | Frontend | React 19, TypeScript 5.9, Vite 7 |
 | Styling | Tailwind CSS 4 |
 | Backend | Rust (tokio, serde, rusqlite) |
-| Encryption | AES-256-GCM, ChaCha20-Poly1305, X25519 |
-| Monorepo | pnpm workspaces + Turborepo |
 | Testing | Vitest (TS), cargo test (Rust) |
 
 ## License
