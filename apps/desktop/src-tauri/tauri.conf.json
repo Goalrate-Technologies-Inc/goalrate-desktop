@@ -46,7 +46,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/Goalrate-Technologies-Inc/goalrate-app/releases/latest/download/latest.json"
+        "https://github.com/Goalrate-Technologies-Inc/goalrate-desktop/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEwOEQzMTQyQUY5QjY0ODgKUldTSVpKdXZRakdOb0NCZGtIWkFISkM5LzdOd0orbmtiTGpzR2IzOGh3Qmh5eGw3SkIxTU9xUUEK"
     }

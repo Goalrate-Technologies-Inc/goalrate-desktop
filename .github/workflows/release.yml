@@ -1,0 +1,242 @@
+name: Release Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.1)'
+        required: true
+        type: string
+      draft:
+        description: 'Create as draft release'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag or input
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          release_name: Goalrate v${{ steps.get_version.outputs.version }}
+          body: |
+            ## Goalrate v${{ steps.get_version.outputs.version }}
+
+            See the assets below to download the installer for your platform.
+
+            ### Installation
+            - **macOS**: Download the `.dmg` file and drag Goalrate to your Applications folder
+            - **Windows**: Download the `.exe` installer and run it
+            - **Linux**: Download the `.AppImage` and make it executable with `chmod +x`
+
+            ### What's Changed
+            See the [CHANGELOG](https://github.com/Goalrate-Technologies-Inc/goalrate-desktop/blob/main/CHANGELOG.md) for details.
+          draft: ${{ inputs.draft || true }}
+          prerelease: false
+
+  build-tauri:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+            target: universal-apple-darwin
+          - platform: ubuntu-22.04
+            args: ''
+            target: x86_64-unknown-linux-gnu
+          - platform: windows-latest
+            args: ''
+            target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './apps/desktop/src-tauri -> target'
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build shared packages
+        run: pnpm turbo run build --filter=@goalrate-app/shared --filter=@goalrate-app/core --filter=@goalrate-app/ui --filter=@goalrate-app/storage --filter=@goalrate-app/tailwind-config
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          projectPath: apps/desktop
+          args: ${{ matrix.args }}
+
+  update-manifest:
+    needs: [create-release, build-tauri]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download v${{ steps.get_version.outputs.version }} \
+            --pattern '*.sig' \
+            --dir ./signatures || true
+
+      - name: Create latest.json manifest
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          REPO="Goalrate-Technologies-Inc/goalrate-desktop"
+          BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
+          RELEASE_URL="https://github.com/${REPO}/releases/tag/v${VERSION}"
+
+          # Read signatures if they exist
+          MACOS_SIG=""
+          WINDOWS_SIG=""
+          LINUX_SIG=""
+
+          if [ -f "./signatures/Goalrate_${VERSION}_universal.dmg.sig" ]; then
+            MACOS_SIG=$(cat "./signatures/Goalrate_${VERSION}_universal.dmg.sig")
+          fi
+          if [ -f "./signatures/Goalrate_${VERSION}_x64-setup.exe.sig" ]; then
+            WINDOWS_SIG=$(cat "./signatures/Goalrate_${VERSION}_x64-setup.exe.sig")
+          fi
+          if [ -f "./signatures/goalrate_${VERSION}_amd64.AppImage.sig" ]; then
+            LINUX_SIG=$(cat "./signatures/goalrate_${VERSION}_amd64.AppImage.sig")
+          fi
+
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See the release notes at ${RELEASE_URL}",
+            "pub_date": "${DATE}",
+            "platforms": {
+              "darwin-universal": {
+                "signature": "${MACOS_SIG}",
+                "url": "${BASE_URL}/Goalrate_${VERSION}_universal.dmg"
+              },
+              "darwin-x86_64": {
+                "signature": "${MACOS_SIG}",
+                "url": "${BASE_URL}/Goalrate_${VERSION}_universal.dmg"
+              },
+              "darwin-aarch64": {
+                "signature": "${MACOS_SIG}",
+                "url": "${BASE_URL}/Goalrate_${VERSION}_universal.dmg"
+              },
+              "windows-x86_64": {
+                "signature": "${WINDOWS_SIG}",
+                "url": "${BASE_URL}/Goalrate_${VERSION}_x64-setup.exe"
+              },
+              "linux-x86_64": {
+                "signature": "${LINUX_SIG}",
+                "url": "${BASE_URL}/goalrate_${VERSION}_amd64.AppImage"
+              }
+            }
+          }
+          EOF
+
+      - name: Upload latest.json to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload v${{ steps.get_version.outputs.version }} latest.json --clobber
+
+  publish-release:
+    needs: [create-release, build-tauri, update-manifest]
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.draft }}
+    steps:
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit v${{ steps.get_version.outputs.version }} --draft=false \
+            --repo ${{ github.repository }}
