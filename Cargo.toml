@@ -1,0 +1,82 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/vault-core",
+    "crates/markdown-parser",
+    "crates/sqlite-index",
+    "crates/focus-engine",
+    "crates/daily-loop",
+    "crates/crypto",
+    # Desktop app Tauri backend
+    "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.1"
+edition = "2021"
+authors = ["Goalrate Technologies Inc."]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/Goalrate-Technologies-Inc/goalrate-desktop"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Serialization (from PRD)
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Async runtime (from PRD)
+tokio = { version = "1", features = ["full"] }
+
+# Database (from PRD)
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# File system watching (from PRD)
+notify = "6.0"
+
+# Cryptography (from PRD)
+ring = "0.17"
+
+# Error handling (from PRD)
+thiserror = "1.0"
+
+# Date/Time (from PRD)
+chrono = { version = "0.4", features = ["serde"] }
+
+# Additional common dependencies
+uuid = { version = "1.6", features = ["v4", "serde"] }
+log = "0.4"
+anyhow = "1.0"
+async-trait = "0.1"
+
+# Crypto extras
+base64 = "0.21"
+rand = "0.8"
+zeroize = { version = "1.7", features = ["derive"] }
+
+# Asymmetric crypto (X25519 key exchange)
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
+
+# ChaCha20Poly1305 AEAD
+chacha20poly1305 = "0.10"
+
+# File system utilities
+walkdir = "2.4"
+dirs = "5.0"
+
+# Testing
+mockall = "0.12"
+tempfile = "3.10"
+
+[profile.dev]
+# Faster compile times for development
+opt-level = 0
+debug = true
+
+[profile.release]
+# Optimize for size and speed
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
