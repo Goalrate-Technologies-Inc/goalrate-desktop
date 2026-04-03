@@ -85,11 +85,6 @@ pnpm run rust:fmt
 
 ## License
 
-This repository uses a multi-license structure:
-
-- **Desktop app & Rust crates** (`apps/desktop/`, `crates/`) -- GPLv3
-- **Shared packages** (`packages/`) -- MIT
-
-See [LICENSE.md](LICENSE.md) for full details.
+GPLv3 -- see [LICENSE.md](LICENSE.md) for details.
 
 Copyright (c) 2025-2026 GoalRate Technologies Inc.
