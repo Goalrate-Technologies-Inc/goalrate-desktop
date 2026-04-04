@@ -29,6 +29,26 @@ goalrate-desktop/
 └── tooling/               # ESLint, TypeScript, Tailwind configs
 ```
 
+## Install
+
+### Homebrew (macOS)
+
+```bash
+brew install --cask goalrate
+```
+
+### Direct Download
+
+Download the latest installer for your platform from the [Releases](https://github.com/Goalrate-Technologies-Inc/goalrate-desktop/releases/latest) page.
+
+| Platform | File |
+|----------|------|
+| macOS (Universal) | `.dmg` |
+| Windows | `.exe` or `.msi` |
+| Linux | `.AppImage`, `.deb`, or `.rpm` |
+
+> **macOS note:** The app is not yet notarized with Apple. On first launch, macOS may block it. Go to **System Settings → Privacy & Security** and click **Open Anyway**.
+
 ## Prerequisites
 
 - **Node.js** >= 24 (< 26)
