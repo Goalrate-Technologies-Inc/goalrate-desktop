@@ -15,7 +15,7 @@ members = [
 version = "0.1.1"
 edition = "2021"
 authors = ["Goalrate Technologies Inc."]
-license = "GPL-3.0-or-later"
+license = "BUSL-1.1"
 repository = "https://github.com/Goalrate-Technologies-Inc/goalrate-desktop"
 rust-version = "1.75"
 
