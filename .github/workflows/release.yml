@@ -25,17 +25,21 @@ jobs:
     outputs:
       release_id: ${{ steps.create_release.outputs.id }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.release_config.outputs.version }}
+      draft: ${{ steps.release_config.outputs.draft }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get version from tag or input
-        id: get_version
+      - name: Get release config
+        id: release_config
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+            echo "draft=${{ inputs.draft }}" >> $GITHUB_OUTPUT
           else
             echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+            echo "draft=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Release
@@ -44,10 +48,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          release_name: Goalrate v${{ steps.get_version.outputs.version }}
+          tag_name: v${{ steps.release_config.outputs.version }}
+          release_name: Goalrate v${{ steps.release_config.outputs.version }}
           body: |
-            ## Goalrate v${{ steps.get_version.outputs.version }}
+            ## Goalrate v${{ steps.release_config.outputs.version }}
 
             See the assets below to download the installer for your platform.
 
@@ -58,7 +62,7 @@ jobs:
 
             ### What's Changed
             See the [CHANGELOG](https://github.com/Goalrate-Technologies-Inc/goalrate-desktop/blob/main/CHANGELOG.md) for details.
-          draft: ${{ inputs.draft || true }}
+          draft: ${{ steps.release_config.outputs.draft == 'true' }}
           prerelease: false
 
   build-tauri:
@@ -144,26 +148,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get version
-        id: get_version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Download release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release download v${{ steps.get_version.outputs.version }} \
+          gh release download v${{ needs.create-release.outputs.version }} \
             --pattern '*.sig' \
             --dir ./signatures || true
 
       - name: Create latest.json manifest
         run: |
-          VERSION="${{ steps.get_version.outputs.version }}"
+          VERSION="${{ needs.create-release.outputs.version }}"
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           REPO="Goalrate-Technologies-Inc/goalrate-desktop"
           BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
@@ -218,25 +213,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload v${{ steps.get_version.outputs.version }} latest.json --clobber
+          gh release upload v${{ needs.create-release.outputs.version }} latest.json --clobber
 
   publish-release:
     needs: [create-release, build-tauri, update-manifest]
     runs-on: ubuntu-latest
-    if: ${{ !inputs.draft }}
+    if: ${{ needs.create-release.outputs.draft != 'true' }}
     steps:
-      - name: Get version
-        id: get_version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release edit v${{ steps.get_version.outputs.version }} --draft=false \
+          gh release edit v${{ needs.create-release.outputs.version }} --draft=false \
             --repo ${{ github.repository }}
