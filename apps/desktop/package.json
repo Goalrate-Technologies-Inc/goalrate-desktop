@@ -2,6 +2,7 @@
   "name": "@goalrate-app/desktop",
   "private": true,
   "version": "0.1.1",
+  "license": "BUSL-1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

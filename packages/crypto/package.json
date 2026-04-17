@@ -2,6 +2,7 @@
   "name": "@goalrate-app/crypto",
   "version": "0.1.0",
   "private": true,
+  "license": "BUSL-1.1",
   "type": "module",
   "description": "Encryption utilities for Goalrate vault data (AES-256-GCM, X25519, ChaCha20Poly1305)",
   "main": "./dist/index.cjs",

@@ -1,32 +1,41 @@
-GoalRate Desktop — GNU General Public License v3.0
+Business Source License 1.1
 
-Copyright (c) 2025-2026 GoalRate Technologies Inc.
+License text copyright (c) 2024 MariaDB plc, All Rights Reserved.
+"Business Source License" is a trademark of MariaDB plc.
 
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version.
+Licensor: GoalRate Technologies Inc.
+Licensed Work: GoalRate Desktop
+Additional Use Grant: You may use the Licensed Work in production, including your modified versions of the Licensed Work, without a separate commercial license, solely as a locally installed desktop application by one named natural person for that person's own use, including commercial or employment-related use performed by that person. For the avoidance of doubt, this Additional Use Grant applies to the circumstances of production use of the Licensed Work, not to who created any modification or fork of it, and the non-production rights granted in the Terms below remain available to individuals and organizations. This Additional Use Grant does not permit production use of the Licensed Work (a) by or for more than one user within a single organization, (b) as part of any multi-user, team, hosted, managed, cloud, sync, white-label, or OEM offering, (c) to provide services to third parties, or (d) to redistribute the Licensed Work for a fee or bundle it as a material part of a paid product or service. Any other production use requires a separate commercial license from the Licensor.
+Change Date: April 17, 2030
+Change License: Apache License, Version 2.0
 
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See the GNU General Public License for more details.
+Terms
 
-You should have received a copy of the GNU General Public License along with
-this program. If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
+The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work. The Licensor may make an Additional Use Grant, above, permitting limited production use.
 
-SPDX-License-Identifier: GPL-3.0-or-later
+Effective on the Change Date, or the fourth anniversary of the first publicly available distribution of a specific version of the Licensed Work under this License, whichever comes first, the Licensor hereby grants you rights under the terms of the Change License, and the rights granted in the paragraph above terminate.
 
-The full license text is available at:
-https://www.gnu.org/licenses/gpl-3.0.txt
+If your use of the Licensed Work does not comply with the requirements currently in effect as described in this License, you must purchase a commercial license from the Licensor, its affiliated entities, or authorized resellers, or you must refrain from using the Licensed Work.
 
-## Trademarks
+All copies of the original and modified Licensed Work, and derivative works of the Licensed Work, are subject to this License. This License applies separately for each version of the Licensed Work and the Change Date may vary for each version of the Licensed Work released by Licensor.
 
-The GoalRate name, logo, and trademarks are the property of GoalRate Technologies Inc. and are not licensed under any open-source license. Use of these trademarks requires explicit written permission.
+You must conspicuously display this License on each original or modified copy of the Licensed Work. If you receive the Licensed Work in original or modified form from a third party, the terms and conditions set forth in this License apply to your use of that work.
 
-## Contributions
+Any use of the Licensed Work in violation of this License will automatically terminate your rights under this License for the current and all other versions of the Licensed Work.
 
-By contributing to this project, you agree that your contributions will be licensed under the GPL-3.0-or-later license.
+This License does not grant you any right in any trademark or logo of Licensor or its affiliates (provided that you may use a trademark or logo of Licensor as expressly required by this License).
 
-## Questions
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK IS PROVIDED ON AN "AS IS" BASIS. LICENSOR HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 
-For licensing inquiries, contact licensing@goalrate.com or open a GitHub issue.
+MariaDB hereby grants you permission to use this License's text to license your works, and to refer to it using the trademark "Business Source License", as long as you comply with the Covenants of Licensor below.
+
+Covenants of Licensor
+
+In consideration of the right to use this License's text and the "Business Source License" name and trademark, Licensor covenants to MariaDB, and to all other recipients of the licensed work to be provided by Licensor:
+
+1. To specify as the Change License the GPL Version 2.0 or any later version, or a license that is compatible with GPL Version 2.0 or a later version, where "compatible" means that software provided under the Change License can be included in a program with software provided under GPL Version 2.0 or a later version. Licensor may specify additional Change Licenses without limitation.
+2. To either: (a) specify an additional grant of rights to use that does not impose any additional restriction on the right granted in this License, as the Additional Use Grant; or (b) insert the text "None" to specify a Change Date. Not to modify this License in any other way.
+
+Notice
+
+The Business Source License (this document, or the "License") is not an Open Source license. However, the Licensed Work will eventually be made available under an Open Source License, as stated in this License.

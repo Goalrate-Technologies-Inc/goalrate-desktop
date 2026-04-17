@@ -1,8 +1,8 @@
 # GoalRate Desktop
 
-AI-powered daily planning for solo founders. Built with [Tauri 2](https://tauri.app/), React 19, and Rust.
+AI-powered daily planning for focused work. Built with [Tauri 2](https://tauri.app/), React 19, and Rust.
 
-GoalRate Desktop is an offline-first desktop app that helps founders stay focused on what matters. It combines a local markdown vault with an AI-driven daily loop to plan, prioritize, and reflect on your work.
+GoalRate Desktop is an offline-first desktop app that helps people stay focused on what matters. It combines a local markdown vault with an AI-driven daily loop to plan, prioritize, and reflect on your work.
 
 ## Architecture
 
@@ -105,6 +105,6 @@ pnpm run rust:fmt
 
 ## License
 
-GPLv3 -- see [LICENSE.md](LICENSE.md) for details.
+Business Source License 1.1 (`BUSL-1.1`) -- source-visible and free for individual local desktop use. Pro, Plus, team, hosted, OEM, and other production uses beyond the Additional Use Grant require a separate commercial license. See [LICENSE.md](LICENSE.md) for details.
 
 Copyright (c) 2025-2026 GoalRate Technologies Inc.
