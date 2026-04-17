@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.3 - 2026-04-17
+
+- Fix the desktop release build by pinning the Tauri JavaScript package versions to a compatible set.
+- Commit the workspace `pnpm-lock.yaml` and make the release workflow install with `--frozen-lockfile` for reproducible installer builds.
+
 ## v0.1.2 - 2026-04-17
 
 - Align the desktop app licensing with the current product plan using BUSL-1.1.
