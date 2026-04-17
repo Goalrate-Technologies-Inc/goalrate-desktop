@@ -1,6 +1,7 @@
 {
   "name": "@goalrate-app/websocket",
   "version": "0.1.0",
+  "license": "BUSL-1.1",
   "description": "WebSocket connection manager for real-time sync and presence",
   "type": "module",
   "main": "./dist/index.cjs",

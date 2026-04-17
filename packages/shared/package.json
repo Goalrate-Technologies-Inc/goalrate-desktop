@@ -2,6 +2,7 @@
   "name": "@goalrate-app/shared",
   "version": "0.1.0",
   "private": true,
+  "license": "BUSL-1.1",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

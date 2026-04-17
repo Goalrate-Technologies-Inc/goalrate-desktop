@@ -1,6 +1,7 @@
 {
   "name": "@goalrate-app/api-client",
   "version": "0.0.1",
+  "license": "BUSL-1.1",
   "description": "Type-safe HTTP client for Goalrate API",
   "type": "module",
   "main": "./dist/index.cjs",

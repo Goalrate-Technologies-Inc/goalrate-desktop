@@ -2,6 +2,7 @@
   "name": "@goalrate-app/tailwind-config",
   "version": "0.1.0",
   "private": true,
+  "license": "BUSL-1.1",
   "description": "Shared Tailwind CSS configuration for GoalRate monorepo",
   "type": "module",
   "main": "./dist/index.js",
