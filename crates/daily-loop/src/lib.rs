@@ -1,8 +1,8 @@
-//! daily-loop - AI Chief of Staff daily planning loop for Goalrate
+//! daily-loop - Assistant-backed Agenda planning for Goalrate
 //!
-//! Provides local SQLite-backed storage for daily plans, outcomes, deferrals,
+//! Provides local SQLite-backed storage for Agenda indexes, outcomes, deferrals,
 //! check-ins, chat messages, and context snapshots. The core data layer for
-//! the AI-driven daily planning feature.
+//! the Assistant-backed Agenda feature.
 //!
 //! # Features
 //!
@@ -10,7 +10,7 @@
 //! - Outcome tracking (Top 3 measurable deliverables per day)
 //! - Deferral tracking with confrontation threshold detection
 //! - End-of-day check-ins with AI summaries
-//! - Chat history for AI-driven plan reprioritization
+//! - Chat history for Assistant-driven Agenda reprioritization
 //! - Plan revision history (append-only audit trail)
 //! - Daily stats aggregation for pattern recognition
 //! - Context snapshots for rolling AI memory

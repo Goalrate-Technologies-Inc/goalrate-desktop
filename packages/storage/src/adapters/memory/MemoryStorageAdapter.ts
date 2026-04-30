@@ -6,6 +6,8 @@
 import type {
   StorageAdapter,
   StorageResult,
+  DeleteGoalOptions,
+  DeleteGoalTaskOptions,
   GoalQueryOptions,
   ProjectQueryOptions,
   FocusQueryOptions,
@@ -418,7 +420,20 @@ export class MemoryStorageAdapter implements StorageAdapter {
     return wrapSuccess(updated);
   }
 
-  async deleteGoal(vaultId: string, goalId: string): Promise<StorageResult<void>> {
+  async deleteGoal(
+    vaultId: string,
+    goalId: string,
+    options: DeleteGoalOptions
+  ): Promise<StorageResult<void>> {
+    if (!options.confirmed) {
+      return wrapError(
+        createStorageError(
+          'VALIDATION_ERROR',
+          'Deleting a goal requires explicit confirmation'
+        )
+      );
+    }
+
     const key = `${vaultId}:${goalId}`;
 
     if (!this.goals.has(key)) {
@@ -529,8 +544,18 @@ export class MemoryStorageAdapter implements StorageAdapter {
   async deleteGoalTask(
     vaultId: string,
     goalId: string,
-    taskId: string
+    taskId: string,
+    options: DeleteGoalTaskOptions
   ): Promise<StorageResult<void>> {
+    if (!options.confirmed) {
+      return wrapError(
+        createStorageError(
+          'VALIDATION_ERROR',
+          'Deleting a goal task requires explicit confirmation'
+        )
+      );
+    }
+
     const key = `${vaultId}:${goalId}:${taskId}`;
 
     if (!this.goalTasks.has(key)) {

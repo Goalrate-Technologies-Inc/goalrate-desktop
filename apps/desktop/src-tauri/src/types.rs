@@ -112,6 +112,7 @@ pub struct VaultStats {
     /// Backward compatible alias
     #[serde(rename = "goalCount")]
     pub goal_count: usize,
+    /// Legacy compatibility field; standalone Projects are not part of the desktop MVP.
     pub project_count: usize,
     pub total_tasks: usize,
     pub completed_tasks: usize,
@@ -193,6 +194,9 @@ pub struct Objective {
     /// Target completion date
     pub deadline: String,
     pub priority: String,
+    /// Eisenhower quadrant used alongside legacy priority.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eisenhower_quadrant: Option<String>,
     /// When work on this goal started
     #[serde(skip_serializing_if = "Option::is_none")]
     pub start_date: Option<String>,
@@ -241,21 +245,27 @@ impl Objective {
 
         let id = get_str("id");
         if id.is_empty() {
-            return Err(AppError::validation_error("Objective missing 'id' field"));
+            return Err(AppError::validation_error("Goal missing 'id' field"));
         }
 
         let title = get_str("title");
         if title.is_empty() {
-            return Err(AppError::validation_error(
-                "Objective missing 'title' field",
-            ));
+            return Err(AppError::validation_error("Goal missing 'title' field"));
         }
 
         // Parse short_title (optional)
         let short_title = get_str_opt("short_title");
 
-        // Parse goal type (new schema) with fallback to objective/description/specific (legacy)
-        let goal_type = get_str_opt("type")
+        // Parse Domain. Current app files have historically used `type` for
+        // Domain, while markdown-first spec files may use `type: goal` plus
+        // a separate `domain` field.
+        let type_value = get_str_opt("type");
+        let goal_type = get_str_opt("domain")
+            .or_else(|| {
+                type_value
+                    .clone()
+                    .filter(|value| !matches!(value.as_str(), "goal" | "objective"))
+            })
             .or_else(|| get_str_opt("objective"))
             .or_else(|| get_str_opt("description"))
             .or_else(|| get_str_opt("specific"))
@@ -324,6 +334,10 @@ impl Objective {
             .map(|v| v as u8)
             .unwrap_or(70);
 
+        let priority = get_str_opt("priority").unwrap_or_else(|| "medium".to_string());
+        let eisenhower_quadrant =
+            get_str_opt("eisenhower_quadrant").or_else(|| priority_to_eisenhower(Some(&priority)));
+
         Ok(Self {
             id,
             title,
@@ -331,7 +345,8 @@ impl Objective {
             goal_type,
             status: get_str_opt("status").unwrap_or_else(|| "active".to_string()),
             deadline: get_str("deadline"),
-            priority: get_str_opt("priority").unwrap_or_else(|| "medium".to_string()),
+            priority,
+            eisenhower_quadrant,
             start_date,
             target,
             current,
@@ -364,8 +379,9 @@ impl Objective {
                 serde_yaml::Value::String(short_title.clone()),
             );
         }
+        fm.insert("type".into(), serde_yaml::Value::String("goal".to_string()));
         fm.insert(
-            "type".into(),
+            "domain".into(),
             serde_yaml::Value::String(self.goal_type.clone()),
         );
         fm.insert(
@@ -380,6 +396,16 @@ impl Objective {
             "priority".into(),
             serde_yaml::Value::String(self.priority.clone()),
         );
+        if let Some(ref quadrant) = self.eisenhower_quadrant {
+            fm.insert(
+                "eisenhower_quadrant".into(),
+                serde_yaml::Value::String(quadrant.clone()),
+            );
+            fm.insert(
+                "priority_color".into(),
+                serde_yaml::Value::String(eisenhower_color_token(quadrant).to_string()),
+            );
+        }
 
         // start_date
         if let Some(ref start_date) = self.start_date {
@@ -475,6 +501,8 @@ pub struct ObjectiveCreate {
     pub deadline: String,
     #[serde(default = "default_priority")]
     pub priority: String,
+    #[serde(default, alias = "eisenhowerQuadrant")]
+    pub eisenhower_quadrant: Option<String>,
     #[serde(default)]
     pub start_date: Option<String>,
     #[serde(default)]
@@ -514,6 +542,8 @@ pub struct TaskCreate {
     pub title: String,
     #[serde(default)]
     pub status: Option<String>,
+    #[serde(default, alias = "eisenhowerQuadrant")]
+    pub eisenhower_quadrant: Option<String>,
     /// Recurrence frequency: daily, weekdays, weekly, monthly, yearly,
     /// or custom like every_3_days, every_2_weeks
     #[serde(default)]
@@ -530,13 +560,31 @@ fn default_priority() -> String {
     "medium".to_string()
 }
 
+pub fn priority_to_eisenhower(priority: Option<&str>) -> Option<String> {
+    match priority.unwrap_or("medium").to_ascii_lowercase().as_str() {
+        "critical" | "high" => Some("do".to_string()),
+        "medium" | "low" => Some("schedule".to_string()),
+        _ => None,
+    }
+}
+
+pub fn eisenhower_color_token(quadrant: &str) -> &'static str {
+    match quadrant {
+        "do" => "semantic-error",
+        "schedule" => "accent-projects",
+        "delegate" => "progress-mid",
+        "delete" => "text-muted",
+        _ => "accent-projects",
+    }
+}
+
 impl ObjectiveCreate {
     /// Convert to a full Objective with generated ID and timestamps
     pub fn into_objective(self) -> Objective {
         let now = Utc::now().to_rfc3339();
         let id = format!(
             "goal_{}",
-            uuid::Uuid::new_v4().to_string().replace("-", "")[..12].to_string()
+            &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]
         );
 
         // Use flat target/current if provided, else pull from legacy measurable
@@ -565,7 +613,10 @@ impl ObjectiveCreate {
             goal_type,
             status: "active".to_string(),
             deadline: self.deadline,
-            priority: self.priority,
+            priority: self.priority.clone(),
+            eisenhower_quadrant: self
+                .eisenhower_quadrant
+                .or_else(|| priority_to_eisenhower(Some(&self.priority))),
             start_date: self.start_date,
             target,
             current,
@@ -607,6 +658,8 @@ pub struct ObjectiveUpdate {
     pub deadline: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", alias = "eisenhowerQuadrant")]
+    pub eisenhower_quadrant: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub start_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -622,6 +675,7 @@ pub struct ObjectiveUpdate {
 impl ObjectiveUpdate {
     /// Apply updates to an existing objective
     pub fn apply_to(self, mut objective: Objective) -> Objective {
+        let quadrant_update = self.eisenhower_quadrant;
         if let Some(title) = self.title {
             objective.title = title;
         }
@@ -638,7 +692,13 @@ impl ObjectiveUpdate {
             objective.deadline = deadline;
         }
         if let Some(priority) = self.priority {
+            if objective.eisenhower_quadrant.is_none() {
+                objective.eisenhower_quadrant = priority_to_eisenhower(Some(&priority));
+            }
             objective.priority = priority;
+        }
+        if let Some(eisenhower_quadrant) = quadrant_update {
+            objective.eisenhower_quadrant = Some(eisenhower_quadrant);
         }
         if let Some(start_date) = self.start_date {
             objective.start_date = Some(start_date);
@@ -799,14 +859,6 @@ impl KeyResult {
             updated: get_str_opt("updated").unwrap_or_else(|| Utc::now().to_rfc3339()),
         })
     }
-}
-
-fn default_column() -> String {
-    "backlog".to_string()
-}
-
-fn default_points() -> u8 {
-    1
 }
 
 // =============================================================================
@@ -1068,562 +1120,6 @@ pub struct FocusListNavigationResult {
     pub ok: bool,
 }
 
-// =============================================================================
-// Project Types
-// =============================================================================
-
-/// A project for managing stories and epics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Project {
-    pub id: String,
-    pub name: String,
-    pub key: String,
-    pub description: Option<String>,
-    pub status: String,
-    pub priority: String,
-    pub project_type: String,
-    #[serde(default)]
-    pub tags: Vec<String>,
-    pub created: String,
-    pub updated: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub target_completion_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub notes: Option<String>,
-}
-
-impl Project {
-    /// Create a Project from frontmatter and body content
-    pub fn from_frontmatter(
-        fm: &markdown_parser::Frontmatter,
-        body: &str,
-    ) -> Result<Self, AppError> {
-        let get_str = |key: &str| -> String {
-            fm.get(key)
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string()
-        };
-
-        let get_str_opt = |key: &str| -> Option<String> {
-            fm.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
-        };
-
-        let id = get_str("id");
-        if id.is_empty() {
-            return Err(AppError::validation_error("Project missing 'id' field"));
-        }
-
-        let name = get_str("name");
-        if name.is_empty() {
-            return Err(AppError::validation_error("Project missing 'name' field"));
-        }
-
-        // Parse tags
-        let tags = fm
-            .get("tags")
-            .and_then(|v| v.as_sequence())
-            .map(|seq| {
-                seq.iter()
-                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        Ok(Self {
-            id,
-            name,
-            key: get_str_opt("key").unwrap_or_else(|| "PROJ".to_string()),
-            description: get_str_opt("description"),
-            status: get_str_opt("status").unwrap_or_else(|| "active".to_string()),
-            priority: get_str_opt("priority").unwrap_or_else(|| "medium".to_string()),
-            project_type: get_str_opt("project_type").unwrap_or_else(|| "software".to_string()),
-            tags,
-            created: get_str("created"),
-            updated: get_str("updated"),
-            start_date: get_str_opt("start_date"),
-            target_completion_date: get_str_opt("target_completion_date"),
-            notes: if body.trim().is_empty() {
-                None
-            } else {
-                Some(body.trim().to_string())
-            },
-        })
-    }
-
-    /// Convert to frontmatter for serialization
-    pub fn to_frontmatter(&self) -> (markdown_parser::Frontmatter, String) {
-        let mut fm = markdown_parser::Frontmatter::new();
-
-        fm.insert("id".into(), serde_yaml::Value::String(self.id.clone()));
-        fm.insert("name".into(), serde_yaml::Value::String(self.name.clone()));
-        fm.insert("key".into(), serde_yaml::Value::String(self.key.clone()));
-        fm.insert(
-            "status".into(),
-            serde_yaml::Value::String(self.status.clone()),
-        );
-        fm.insert(
-            "priority".into(),
-            serde_yaml::Value::String(self.priority.clone()),
-        );
-        fm.insert(
-            "project_type".into(),
-            serde_yaml::Value::String(self.project_type.clone()),
-        );
-
-        if let Some(ref description) = self.description {
-            fm.insert(
-                "description".into(),
-                serde_yaml::Value::String(description.clone()),
-            );
-        }
-
-        if let Some(ref start_date) = self.start_date {
-            fm.insert(
-                "start_date".into(),
-                serde_yaml::Value::String(start_date.clone()),
-            );
-        }
-
-        if let Some(ref target_completion_date) = self.target_completion_date {
-            fm.insert(
-                "target_completion_date".into(),
-                serde_yaml::Value::String(target_completion_date.clone()),
-            );
-        }
-
-        // Tags
-        let tags: Vec<serde_yaml::Value> = self
-            .tags
-            .iter()
-            .map(|s| serde_yaml::Value::String(s.clone()))
-            .collect();
-        fm.insert("tags".into(), serde_yaml::Value::Sequence(tags));
-
-        fm.insert(
-            "created".into(),
-            serde_yaml::Value::String(self.created.clone()),
-        );
-        fm.insert(
-            "updated".into(),
-            serde_yaml::Value::String(self.updated.clone()),
-        );
-
-        let body = self.notes.clone().unwrap_or_default();
-        (fm, body)
-    }
-}
-
-/// Data for creating a new project
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectCreate {
-    pub name: String,
-    #[serde(default = "default_project_key")]
-    pub key: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default = "default_project_type")]
-    pub project_type: String,
-    #[serde(default = "default_priority")]
-    pub priority: String,
-    #[serde(default)]
-    pub tags: Vec<String>,
-    #[serde(default)]
-    pub start_date: Option<String>,
-    #[serde(default)]
-    pub target_completion_date: Option<String>,
-    #[serde(default)]
-    pub notes: Option<String>,
-}
-
-fn default_project_key() -> String {
-    "PROJ".to_string()
-}
-
-fn default_project_type() -> String {
-    "software".to_string()
-}
-
-impl ProjectCreate {
-    /// Convert to a full Project with generated ID and timestamps
-    pub fn into_project(self) -> Project {
-        let now = Utc::now().to_rfc3339();
-        let id = format!(
-            "proj_{}",
-            uuid::Uuid::new_v4().to_string().replace("-", "")[..12].to_string()
-        );
-
-        Project {
-            id,
-            name: self.name,
-            key: self.key,
-            description: self.description,
-            status: "active".to_string(),
-            priority: self.priority,
-            project_type: self.project_type,
-            tags: self.tags,
-            created: now.clone(),
-            updated: now,
-            start_date: self.start_date,
-            target_completion_date: self.target_completion_date,
-            notes: self.notes,
-        }
-    }
-}
-
-/// Data for updating an existing project
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectUpdate {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub priority: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub project_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub target_completion_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub notes: Option<String>,
-}
-
-impl ProjectUpdate {
-    /// Apply updates to an existing project
-    pub fn apply_to(self, mut project: Project) -> Project {
-        if let Some(name) = self.name {
-            project.name = name;
-        }
-        if let Some(key) = self.key {
-            project.key = key;
-        }
-        if let Some(description) = self.description {
-            project.description = Some(description);
-        }
-        if let Some(status) = self.status {
-            project.status = status;
-        }
-        if let Some(priority) = self.priority {
-            project.priority = priority;
-        }
-        if let Some(project_type) = self.project_type {
-            project.project_type = project_type;
-        }
-        if let Some(tags) = self.tags {
-            project.tags = tags;
-        }
-        if let Some(start_date) = self.start_date {
-            project.start_date = Some(start_date);
-        }
-        if let Some(target_completion_date) = self.target_completion_date {
-            project.target_completion_date = Some(target_completion_date);
-        }
-        if let Some(notes) = self.notes {
-            project.notes = Some(notes);
-        }
-        project.updated = Utc::now().to_rfc3339();
-        project
-    }
-}
-
-// =============================================================================
-// Project Task Types
-// =============================================================================
-
-/// A task within a project
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectTask {
-    pub id: String,
-    pub title: String,
-    pub column: String,
-    pub points: u8,
-    pub priority: String,
-    /// Flag to identify task entries for indexing
-    pub is_task: bool,
-    /// Workspace ID associated with this task
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub workspace_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub due_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed_by: Option<String>,
-    #[serde(default)]
-    pub subtasks: Vec<Subtask>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub notes: Option<String>,
-    pub created: String,
-    pub updated: String,
-}
-
-impl ProjectTask {
-    /// Create a ProjectTask from frontmatter and body content
-    pub fn from_frontmatter(
-        fm: &markdown_parser::Frontmatter,
-        body: &str,
-    ) -> Result<Self, AppError> {
-        let get_str = |key: &str| -> String {
-            fm.get(key)
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string()
-        };
-
-        let get_str_opt = |key: &str| -> Option<String> {
-            fm.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
-        };
-
-        let get_bool = |key: &str| -> Option<bool> { fm.get(key).and_then(|v| v.as_bool()) };
-
-        let id = get_str("id");
-        if id.is_empty() {
-            return Err(AppError::validation_error("Task missing 'id' field"));
-        }
-
-        let title = get_str("title");
-        if title.is_empty() {
-            return Err(AppError::validation_error("Task missing 'title' field"));
-        }
-
-        // Parse subtasks
-        let subtasks = fm
-            .get("subtasks")
-            .and_then(|v| v.as_sequence())
-            .map(|seq| {
-                seq.iter()
-                    .filter_map(|item| {
-                        let title = item.get("title")?.as_str()?.to_string();
-                        let done = item.get("done").and_then(|d| d.as_bool()).unwrap_or(false);
-                        Some(Subtask { title, done })
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let points = fm
-            .get("points")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as u8)
-            .unwrap_or(1);
-
-        Ok(Self {
-            id,
-            title,
-            column: get_str_opt("column").unwrap_or_else(|| "backlog".to_string()),
-            points,
-            priority: get_str_opt("priority").unwrap_or_else(|| "medium".to_string()),
-            is_task: get_bool("is_task")
-                .or_else(|| get_bool("isTask"))
-                .unwrap_or(true),
-            workspace_id: get_str_opt("workspace_id").or_else(|| get_str_opt("workspaceId")),
-            due_date: get_str_opt("due_date").or_else(|| get_str_opt("dueDate")),
-            completed_at: get_str_opt("completed_at").or_else(|| get_str_opt("completedAt")),
-            completed_by: get_str_opt("completed_by").or_else(|| get_str_opt("completedBy")),
-            subtasks,
-            notes: if body.trim().is_empty() {
-                None
-            } else {
-                Some(body.trim().to_string())
-            },
-            created: get_str_opt("created").unwrap_or_else(|| Utc::now().to_rfc3339()),
-            updated: get_str_opt("updated").unwrap_or_else(|| Utc::now().to_rfc3339()),
-        })
-    }
-
-    /// Convert to frontmatter for serialization
-    pub fn to_frontmatter(&self) -> (markdown_parser::Frontmatter, String) {
-        let mut fm = markdown_parser::Frontmatter::new();
-
-        fm.insert("id".into(), serde_yaml::Value::String(self.id.clone()));
-        fm.insert(
-            "title".into(),
-            serde_yaml::Value::String(self.title.clone()),
-        );
-        fm.insert(
-            "column".into(),
-            serde_yaml::Value::String(self.column.clone()),
-        );
-        fm.insert(
-            "points".into(),
-            serde_yaml::Value::Number(self.points.into()),
-        );
-        fm.insert(
-            "priority".into(),
-            serde_yaml::Value::String(self.priority.clone()),
-        );
-        fm.insert("is_task".into(), serde_yaml::Value::Bool(self.is_task));
-
-        if let Some(ref workspace_id) = self.workspace_id {
-            fm.insert(
-                "workspace_id".into(),
-                serde_yaml::Value::String(workspace_id.clone()),
-            );
-        }
-
-        if let Some(ref due_date) = self.due_date {
-            fm.insert(
-                "due_date".into(),
-                serde_yaml::Value::String(due_date.clone()),
-            );
-        }
-
-        if let Some(ref completed_at) = self.completed_at {
-            fm.insert(
-                "completed_at".into(),
-                serde_yaml::Value::String(completed_at.clone()),
-            );
-        }
-
-        if let Some(ref completed_by) = self.completed_by {
-            fm.insert(
-                "completed_by".into(),
-                serde_yaml::Value::String(completed_by.clone()),
-            );
-        }
-
-        // Subtasks
-        if !self.subtasks.is_empty() {
-            let subtasks = serde_yaml::to_value(&self.subtasks).unwrap_or_default();
-            fm.insert("subtasks".into(), subtasks);
-        }
-
-        fm.insert(
-            "created".into(),
-            serde_yaml::Value::String(self.created.clone()),
-        );
-        fm.insert(
-            "updated".into(),
-            serde_yaml::Value::String(self.updated.clone()),
-        );
-
-        let body = self.notes.clone().unwrap_or_default();
-        (fm, body)
-    }
-}
-
-/// Data for creating a new project task
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectTaskCreate {
-    pub title: String,
-    #[serde(default = "default_column")]
-    pub column: String,
-    #[serde(default = "default_points")]
-    pub points: u8,
-    #[serde(default = "default_priority")]
-    pub priority: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub workspace_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub due_date: Option<String>,
-    #[serde(default)]
-    pub subtasks: Vec<Subtask>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub notes: Option<String>,
-}
-
-impl ProjectTaskCreate {
-    /// Convert to a full ProjectTask with generated ID and timestamps
-    pub fn into_task(self) -> ProjectTask {
-        let now = Utc::now().to_rfc3339();
-        let id = format!(
-            "ptask_{}",
-            uuid::Uuid::new_v4().to_string().replace("-", "")[..8].to_string()
-        );
-
-        ProjectTask {
-            id,
-            title: self.title,
-            column: self.column,
-            points: self.points,
-            priority: self.priority,
-            is_task: true,
-            workspace_id: self.workspace_id,
-            due_date: self.due_date,
-            completed_at: None,
-            completed_by: None,
-            subtasks: self.subtasks,
-            notes: self.notes,
-            created: now.clone(),
-            updated: now,
-        }
-    }
-}
-
-/// Data for updating an existing project task
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectTaskUpdate {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub column: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub points: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub priority: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub due_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed_by: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub subtasks: Option<Vec<Subtask>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub notes: Option<String>,
-}
-
-impl ProjectTaskUpdate {
-    /// Apply updates to an existing task
-    pub fn apply_to(self, mut task: ProjectTask) -> ProjectTask {
-        if let Some(title) = self.title {
-            task.title = title;
-        }
-        if let Some(column) = self.column {
-            task.column = column;
-        }
-        if let Some(points) = self.points {
-            task.points = points;
-        }
-        if let Some(priority) = self.priority {
-            task.priority = priority;
-        }
-        if let Some(due_date) = self.due_date {
-            task.due_date = Some(due_date);
-        }
-        if let Some(completed_at) = self.completed_at {
-            task.completed_at = Some(completed_at);
-        }
-        if let Some(completed_by) = self.completed_by {
-            task.completed_by = Some(completed_by);
-        }
-        if let Some(subtasks) = self.subtasks {
-            task.subtasks = subtasks;
-        }
-        if let Some(notes) = self.notes {
-            task.notes = Some(notes);
-        }
-        task.updated = Utc::now().to_rfc3339();
-        task
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1692,6 +1188,7 @@ mod tests {
             goal_type: "Personal".to_string(),
             deadline: "2026-12-31".to_string(),
             priority: "high".to_string(),
+            eisenhower_quadrant: None,
             start_date: None,
             target: None,
             current: None,

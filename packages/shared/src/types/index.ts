@@ -35,6 +35,7 @@ export {
 
 // Daily Loop types
 export type {
+  ScheduledTask,
   DailyPlan,
   Outcome,
   Deferral,
@@ -90,6 +91,24 @@ export type {
   AvatarUploadState,
   DateOfBirthState,
 } from './user';
+
+export type {
+  LaunchPlanId,
+  EntitlementKey,
+  EntitlementMatrix,
+} from './entitlements';
+
+export {
+  LAUNCH_PLANS,
+  PLAN_ENTITLEMENTS,
+  APP_STORE_LAUNCH_PLANS,
+  APP_STORE_LAUNCH_ENTITLEMENTS,
+  isLaunchPlanId,
+  normalizeLaunchPlanId,
+  entitlementsForPlan,
+  hasEntitlement,
+  planAllowsAi,
+} from './entitlements';
 
 // Goal types
 export type {

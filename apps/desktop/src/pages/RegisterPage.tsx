@@ -103,7 +103,7 @@ export default function RegisterPage(): React.ReactElement {
             <div className="space-y-2">
               <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
               <CardDescription className="text-base">
-                Sign up to sync your goals across devices
+                Create a GoalRate account
               </CardDescription>
             </div>
 

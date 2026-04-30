@@ -16,8 +16,15 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '@': resolve(__dirname, './src'),
-    },
+    alias: [
+      {
+        find: /^@goalrate-app\/shared$/,
+        replacement: resolve(__dirname, '../../packages/shared/src/index.ts'),
+      },
+      {
+        find: '@',
+        replacement: resolve(__dirname, './src'),
+      },
+    ],
   },
 });

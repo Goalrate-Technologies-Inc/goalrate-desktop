@@ -7,6 +7,8 @@ import type { VaultEncryptionConfig } from '@goalrate-app/shared';
 import type {
   StorageAdapter,
   StorageResult,
+  DeleteGoalOptions,
+  DeleteGoalTaskOptions,
   GoalQueryOptions,
   ProjectQueryOptions,
   FocusQueryOptions,
@@ -557,10 +559,23 @@ export class TeamStorageAdapter implements StorageAdapter {
     });
   }
 
-  async deleteGoal(vaultId: string, goalId: string): Promise<StorageResult<void>> {
+  async deleteGoal(
+    vaultId: string,
+    goalId: string,
+    options: DeleteGoalOptions
+  ): Promise<StorageResult<void>> {
+    if (!options.confirmed) {
+      return wrapError(
+        createStorageError(
+          'VALIDATION_ERROR',
+          'Deleting a goal requires explicit confirmation'
+        )
+      );
+    }
+
     // Delete doesn't need encryption, but should wait for unlock
     return this.ensureUnlockedOrQueue(vaultId, 'deleteGoal', async () => {
-      const result = await this.api.deleteGoal(vaultId, goalId);
+      const result = await this.api.deleteGoal(vaultId, goalId, options);
 
       if (result.success) {
         // Emit entity change event for sync integration
@@ -684,10 +699,20 @@ export class TeamStorageAdapter implements StorageAdapter {
   async deleteGoalTask(
     vaultId: string,
     goalId: string,
-    taskId: string
+    taskId: string,
+    options: DeleteGoalTaskOptions
   ): Promise<StorageResult<void>> {
+    if (!options.confirmed) {
+      return wrapError(
+        createStorageError(
+          'VALIDATION_ERROR',
+          'Deleting a goal task requires explicit confirmation'
+        )
+      );
+    }
+
     return this.ensureUnlockedOrQueue(vaultId, 'deleteGoalTask', () =>
-      this.api.deleteGoalTask(vaultId, goalId, taskId)
+      this.api.deleteGoalTask(vaultId, goalId, taskId, options)
     );
   }
 

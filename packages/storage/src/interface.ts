@@ -113,6 +113,14 @@ export interface GoalQueryOptions extends QueryOptions {
   search?: string;
 }
 
+export interface DeleteGoalOptions {
+  confirmed: boolean;
+}
+
+export interface DeleteGoalTaskOptions {
+  confirmed: boolean;
+}
+
 /**
  * Project query filters
  */
@@ -235,7 +243,11 @@ export interface StorageAdapter {
   /**
    * Delete a goal
    */
-  deleteGoal(vaultId: string, goalId: string): Promise<StorageResult<void>>;
+  deleteGoal(
+    vaultId: string,
+    goalId: string,
+    options: DeleteGoalOptions
+  ): Promise<StorageResult<void>>;
 
   /**
    * Archive a goal
@@ -285,7 +297,8 @@ export interface StorageAdapter {
   deleteGoalTask(
     vaultId: string,
     goalId: string,
-    taskId: string
+    taskId: string,
+    options: DeleteGoalTaskOptions
   ): Promise<StorageResult<void>>;
 
   /**
@@ -551,7 +564,7 @@ export interface StorageAdapter {
   ): Promise<StorageResult<VaultSearchResult[]>>;
 
   // -------------------------------------------------------------------------
-  // Sync Operations (for Pro+ features)
+  // Sync Operations (for Pro and higher)
   // -------------------------------------------------------------------------
 
   /**

@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS daily_plans (
     task_order TEXT NOT NULL DEFAULT '[]',
     task_titles TEXT NOT NULL DEFAULT '{}',
     completed_task_ids TEXT NOT NULL DEFAULT '[]',
+    generated_at TEXT,
+    scheduled_tasks TEXT NOT NULL DEFAULT '[]',
     locked_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -118,6 +120,10 @@ fn parse_json_vec(s: &str) -> Vec<String> {
     serde_json::from_str(s).unwrap_or_default()
 }
 
+fn parse_json_scheduled_tasks(s: &str) -> Vec<ScheduledTask> {
+    serde_json::from_str(s).unwrap_or_default()
+}
+
 fn parse_date(s: &str) -> NaiveDate {
     s.parse()
         .unwrap_or(NaiveDate::from_ymd_opt(2000, 1, 1).unwrap())
@@ -180,6 +186,35 @@ impl DailyLoopDb {
             )?;
         }
 
+        // Migration: add generated_at column
+        let has_generated_at: bool = self
+            .conn
+            .prepare(
+                "SELECT COUNT(*) FROM pragma_table_info('daily_plans') WHERE name='generated_at'",
+            )?
+            .query_row([], |row| row.get::<_, i32>(0))
+            .map(|c| c > 0)
+            .unwrap_or(false);
+        if !has_generated_at {
+            self.conn
+                .execute_batch("ALTER TABLE daily_plans ADD COLUMN generated_at TEXT")?;
+        }
+
+        // Migration: add scheduled_tasks column for the derived Agenda row cache
+        let has_scheduled_tasks: bool = self
+            .conn
+            .prepare(
+                "SELECT COUNT(*) FROM pragma_table_info('daily_plans') WHERE name='scheduled_tasks'",
+            )?
+            .query_row([], |row| row.get::<_, i32>(0))
+            .map(|c| c > 0)
+            .unwrap_or(false);
+        if !has_scheduled_tasks {
+            self.conn.execute_batch(
+                "ALTER TABLE daily_plans ADD COLUMN scheduled_tasks TEXT NOT NULL DEFAULT '[]'",
+            )?;
+        }
+
         Ok(())
     }
 
@@ -190,7 +225,9 @@ impl DailyLoopDb {
         let completed_json: String = row.get::<_, String>(5).unwrap_or_else(|_| "[]".to_string());
         let completed_task_ids: Vec<String> =
             serde_json::from_str(&completed_json).unwrap_or_default();
-        let locked_str: Option<String> = row.get(6)?;
+        let scheduled_tasks_json: String =
+            row.get::<_, String>(7).unwrap_or_else(|_| "[]".to_string());
+        let locked_str: Option<String> = row.get(8)?;
         Ok(DailyPlan {
             id: row.get(0)?,
             date: parse_date(&row.get::<_, String>(1)?),
@@ -198,9 +235,11 @@ impl DailyLoopDb {
             task_order: parse_json_vec(&row.get::<_, String>(3)?),
             task_titles,
             completed_task_ids,
+            generated_at: row.get(6)?,
+            scheduled_tasks: parse_json_scheduled_tasks(&scheduled_tasks_json),
             locked_at: locked_str.as_deref().map(parse_dt),
-            created_at: parse_dt(&row.get::<_, String>(7)?),
-            updated_at: parse_dt(&row.get::<_, String>(8)?),
+            created_at: parse_dt(&row.get::<_, String>(9)?),
+            updated_at: parse_dt(&row.get::<_, String>(10)?),
         })
     }
 
@@ -210,7 +249,7 @@ impl DailyLoopDb {
     pub fn get_plan_by_date(&self, date: NaiveDate) -> DailyLoopResult<Option<DailyPlan>> {
         self.conn
             .prepare(
-                "SELECT id, date, top_3_outcome_ids, task_order, task_titles, completed_task_ids, locked_at, created_at, updated_at
+                "SELECT id, date, top_3_outcome_ids, task_order, task_titles, completed_task_ids, generated_at, scheduled_tasks, locked_at, created_at, updated_at
                  FROM daily_plans WHERE date = ?1",
             )?
             .query_row(params![date.to_string()], Self::read_plan)
@@ -218,7 +257,7 @@ impl DailyLoopDb {
             .map_err(Into::into)
     }
 
-    /// Create a new daily plan
+    /// Create a new Agenda index row
     pub fn create_plan(&self, date: NaiveDate) -> DailyLoopResult<DailyPlan> {
         if self.get_plan_by_date(date)?.is_some() {
             return Err(DailyLoopError::PlanAlreadyExists(date.to_string()));
@@ -231,6 +270,8 @@ impl DailyLoopDb {
             task_order: vec![],
             task_titles: std::collections::HashMap::new(),
             completed_task_ids: vec![],
+            generated_at: None,
+            scheduled_tasks: Vec::new(),
             locked_at: None,
             created_at: now(),
             updated_at: now(),
@@ -308,6 +349,83 @@ impl DailyLoopDb {
         Ok(())
     }
 
+    /// Synchronize the derived plan index from authoritative Agenda markdown.
+    pub fn sync_plan_index_from_markdown(&self, plan: &DailyPlan) -> DailyLoopResult<DailyPlan> {
+        let existing = self.get_plan_by_date(plan.date)?;
+        let updated_at = now();
+        let locked_at = plan
+            .locked_at
+            .or_else(|| existing.as_ref().and_then(|cached| cached.locked_at));
+        let locked_at_text = locked_at.as_ref().map(fmt_dt);
+        let top_3_json = serde_json::to_string(&plan.top_3_outcome_ids)?;
+        let task_order_json = serde_json::to_string(&plan.task_order)?;
+        let task_titles_json = serde_json::to_string(&plan.task_titles)?;
+        let completed_json = serde_json::to_string(&plan.completed_task_ids)?;
+        let scheduled_tasks_json = serde_json::to_string(&plan.scheduled_tasks)?;
+        let generated_at = plan.generated_at.as_deref();
+
+        let (id, created_at) = if let Some(existing) = existing {
+            self.conn.execute(
+                "UPDATE daily_plans
+                 SET top_3_outcome_ids = ?1,
+                     task_order = ?2,
+                     task_titles = ?3,
+                     completed_task_ids = ?4,
+                     generated_at = ?5,
+                     scheduled_tasks = ?6,
+                     locked_at = ?7,
+                     updated_at = ?8
+                 WHERE id = ?9",
+                params![
+                    top_3_json,
+                    task_order_json,
+                    task_titles_json,
+                    completed_json,
+                    generated_at,
+                    scheduled_tasks_json,
+                    locked_at_text,
+                    fmt_dt(&updated_at),
+                    existing.id,
+                ],
+            )?;
+            (existing.id, existing.created_at)
+        } else {
+            self.conn.execute(
+                "INSERT INTO daily_plans
+                    (id, date, top_3_outcome_ids, task_order, task_titles, completed_task_ids, generated_at, scheduled_tasks, locked_at, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    plan.id,
+                    plan.date.to_string(),
+                    top_3_json,
+                    task_order_json,
+                    task_titles_json,
+                    completed_json,
+                    generated_at,
+                    scheduled_tasks_json,
+                    locked_at_text,
+                    fmt_dt(&plan.created_at),
+                    fmt_dt(&updated_at),
+                ],
+            )?;
+            (plan.id.clone(), plan.created_at)
+        };
+
+        Ok(DailyPlan {
+            id,
+            date: plan.date,
+            top_3_outcome_ids: plan.top_3_outcome_ids.clone(),
+            task_order: plan.task_order.clone(),
+            task_titles: plan.task_titles.clone(),
+            completed_task_ids: plan.completed_task_ids.clone(),
+            generated_at: plan.generated_at.clone(),
+            scheduled_tasks: plan.scheduled_tasks.clone(),
+            locked_at,
+            created_at,
+            updated_at,
+        })
+    }
+
     /// Toggle a task's completion status on a plan
     pub fn toggle_task_completion(
         &self,
@@ -349,7 +467,7 @@ impl DailyLoopDb {
     pub fn get_plan_by_id(&self, plan_id: &str) -> DailyLoopResult<DailyPlan> {
         self.conn
             .query_row(
-                "SELECT id, date, top_3_outcome_ids, task_order, task_titles, completed_task_ids, locked_at, created_at, updated_at
+                "SELECT id, date, top_3_outcome_ids, task_order, task_titles, completed_task_ids, generated_at, scheduled_tasks, locked_at, created_at, updated_at
                  FROM daily_plans WHERE id = ?1",
                 params![plan_id],
                 Self::read_plan,
@@ -370,7 +488,7 @@ impl DailyLoopDb {
         })
     }
 
-    /// Create an outcome linked to a daily plan
+    /// Create an outcome linked to an Agenda
     pub fn create_outcome(
         &self,
         daily_plan_id: &str,
@@ -408,7 +526,7 @@ impl DailyLoopDb {
         Ok(outcome)
     }
 
-    /// Get all outcomes for a daily plan
+    /// Get all outcomes for an Agenda
     pub fn get_outcomes_for_plan(&self, daily_plan_id: &str) -> DailyLoopResult<Vec<Outcome>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, daily_plan_id, title, linked_task_ids, created_at, ai_generated
@@ -460,7 +578,7 @@ impl DailyLoopDb {
         Ok(())
     }
 
-    fn get_outcome_by_id(&self, outcome_id: &str) -> DailyLoopResult<Outcome> {
+    pub fn get_outcome_by_id(&self, outcome_id: &str) -> DailyLoopResult<Outcome> {
         self.conn
             .query_row(
                 "SELECT id, daily_plan_id, title, linked_task_ids, created_at, ai_generated
@@ -935,6 +1053,75 @@ mod tests {
         // Persists across re-read
         let plan = db.get_plan_by_id(&plan.id).unwrap();
         assert_eq!(plan.completed_task_ids, vec!["t2".to_string()]);
+    }
+
+    #[test]
+    fn test_sync_plan_index_from_markdown_replaces_derived_fields() {
+        let db = DailyLoopDb::open_in_memory().unwrap();
+        let date = NaiveDate::from_ymd_opt(2026, 4, 26).unwrap();
+        let plan = db.create_plan(date).unwrap();
+        db.update_plan(
+            &plan.id,
+            Some(vec!["old_outcome".into()]),
+            Some(vec!["old_task".into()]),
+        )
+        .unwrap();
+
+        let mut task_titles = std::collections::HashMap::new();
+        task_titles.insert("task_beta".to_string(), "Beta task".to_string());
+        task_titles.insert("task_alpha".to_string(), "Alpha task".to_string());
+        let markdown_plan = DailyPlan {
+            top_3_outcome_ids: vec!["outcome_beta".into()],
+            task_order: vec!["task_beta".into(), "task_alpha".into()],
+            task_titles,
+            completed_task_ids: vec!["task_beta".into()],
+            generated_at: Some("2026-04-26T09:00:00-07:00".into()),
+            scheduled_tasks: vec![ScheduledTask {
+                id: "scheduled_task_beta".into(),
+                task_id: "task_beta".into(),
+                title: "Beta task".into(),
+                start_time: "9:00 AM".into(),
+                duration_minutes: 30,
+                estimate_source: Some("manual".into()),
+                eisenhower_quadrant: Some("do".into()),
+            }],
+            ..plan.clone()
+        };
+
+        let synced = db.sync_plan_index_from_markdown(&markdown_plan).unwrap();
+
+        assert_eq!(synced.id, plan.id);
+        assert_eq!(synced.top_3_outcome_ids, vec!["outcome_beta".to_string()]);
+        assert_eq!(
+            synced.task_order,
+            vec!["task_beta".to_string(), "task_alpha".to_string()]
+        );
+        assert_eq!(synced.completed_task_ids, vec!["task_beta".to_string()]);
+        assert_eq!(
+            synced.task_titles.get("task_alpha").map(String::as_str),
+            Some("Alpha task")
+        );
+        assert_eq!(
+            synced.generated_at.as_deref(),
+            Some("2026-04-26T09:00:00-07:00")
+        );
+        assert_eq!(synced.scheduled_tasks.len(), 1);
+
+        let fetched = db.get_plan_by_id(&plan.id).unwrap();
+        assert_eq!(fetched.top_3_outcome_ids, synced.top_3_outcome_ids);
+        assert_eq!(fetched.task_order, synced.task_order);
+        assert_eq!(fetched.completed_task_ids, synced.completed_task_ids);
+        assert_eq!(fetched.task_titles, synced.task_titles);
+        assert_eq!(fetched.generated_at, synced.generated_at);
+        assert_eq!(fetched.scheduled_tasks.len(), synced.scheduled_tasks.len());
+        assert_eq!(
+            fetched.scheduled_tasks[0].task_id,
+            synced.scheduled_tasks[0].task_id
+        );
+        assert_eq!(
+            fetched.scheduled_tasks[0].start_time,
+            synced.scheduled_tasks[0].start_time
+        );
     }
 
     #[test]

@@ -1,6 +1,6 @@
-import { useCallback, useState } from 'react';
-import { Check, X, CalendarCheck, ArrowRight, Loader2 } from 'lucide-react';
-import type { UseDailyLoopReturn } from '../../hooks/useDailyLoop';
+import { useCallback, useState } from "react";
+import { Check, X, CalendarCheck, ArrowRight, Loader2 } from "lucide-react";
+import type { UseDailyLoopReturn } from "../../hooks/useDailyLoop";
 
 interface CheckInDialogProps {
   dailyLoop: UseDailyLoopReturn;
@@ -16,7 +16,7 @@ export function CheckInDialog({
   onClose,
 }: CheckInDialogProps): React.ReactElement | null {
   const { plan, taskTitles } = dailyLoop;
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const taskOrder = plan?.taskOrder ?? [];
@@ -34,7 +34,7 @@ export function CheckInDialog({
       // Create check-in with completed task IDs
       await dailyLoop.createCheckIn(doneTasks, notes || undefined);
 
-      setNotes('');
+      setNotes("");
       onClose();
     } catch {
       // Error handled in hook
@@ -43,10 +43,16 @@ export function CheckInDialog({
     }
   }, [remainingTasks, doneTasks, notes, dailyLoop, onClose]);
 
-  if (!open) {return null;}
+  if (!open) {
+    return null;
+  }
 
   const taskLabel = (id: string): string =>
-    taskTitles[id] || id.replace(/^task_/, '').replace(/_/g, ' ').replace(/\b\w/, (c) => c.toUpperCase());
+    taskTitles[id] ||
+    id
+      .replace(/^task_/, "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/, (c) => c.toUpperCase());
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -55,9 +61,14 @@ export function CheckInDialog({
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CalendarCheck className="h-5 w-5 text-accent-goals" />
-            <h2 className="font-serif text-xl text-text-primary">End-of-Day Check-In</h2>
+            <h2 className="font-serif text-xl text-text-primary">
+              End-of-Day Check-In
+            </h2>
           </div>
-          <button onClick={onClose} className="rounded p-1 hover:bg-surface-warm">
+          <button
+            onClick={onClose}
+            className="rounded p-1 hover:bg-surface-warm"
+          >
             <X className="h-4 w-4 text-text-muted" />
           </button>
         </div>
@@ -71,11 +82,16 @@ export function CheckInDialog({
               </h3>
               <ul className="space-y-1">
                 {doneTasks.map((id) => (
-                  <li key={id} className="flex items-center gap-2 rounded-md px-2 py-1.5">
+                  <li
+                    key={id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5"
+                  >
                     <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-progress-high bg-progress-high text-white">
                       <Check className="h-3 w-3" />
                     </div>
-                    <span className="text-sm text-text-muted line-through">{taskLabel(id)}</span>
+                    <span className="text-sm text-text-muted line-through">
+                      {taskLabel(id)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -90,9 +106,14 @@ export function CheckInDialog({
               </h3>
               <ul className="space-y-1">
                 {remainingTasks.map((id) => (
-                  <li key={id} className="flex items-center gap-2 rounded-md px-2 py-1.5">
+                  <li
+                    key={id}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5"
+                  >
                     <ArrowRight className="h-4 w-4 shrink-0 text-text-muted" />
-                    <span className="text-sm text-text-secondary">{taskLabel(id)}</span>
+                    <span className="text-sm text-text-secondary">
+                      {taskLabel(id)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -100,7 +121,7 @@ export function CheckInDialog({
           )}
 
           {taskOrder.length === 0 && (
-            <p className="text-sm text-text-muted">No tasks in today's plan.</p>
+            <p className="text-sm text-text-muted">No tasks in the Agenda.</p>
           )}
         </div>
 
@@ -132,7 +153,7 @@ export function CheckInDialog({
                 Saving...
               </>
             ) : (
-              'Complete Check-In'
+              "Complete Check-In"
             )}
           </button>
         </div>

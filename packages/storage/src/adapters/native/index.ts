@@ -6,12 +6,14 @@
  * when the React Native mobile application is created.
  *
  * The actual implementation will use @react-native-async-storage/async-storage
- * with optional cloud sync support for Pro+ users.
+ * with optional cloud sync support for Pro and higher users.
  */
 
 import type {
   StorageAdapter,
   StorageResult,
+  DeleteGoalOptions,
+  DeleteGoalTaskOptions,
   GoalQueryOptions,
   ProjectQueryOptions,
   SprintQueryOptions,
@@ -52,7 +54,7 @@ import type {
 import { createStorageError, wrapError } from '../../errors';
 
 export interface NativeStorageOptions {
-  /** Enable cloud sync for Pro+ users */
+  /** Enable cloud sync for Pro and higher users */
   enableSync?: boolean;
   /** API base URL for cloud sync */
   apiBaseUrl?: string;
@@ -140,7 +142,11 @@ export class NativeStorageAdapterPlaceholder implements StorageAdapter {
     return this.notImplemented<SmartGoal>('updateGoal');
   }
 
-  async deleteGoal(_vaultId: string, _goalId: string): Promise<StorageResult<void>> {
+  async deleteGoal(
+    _vaultId: string,
+    _goalId: string,
+    _options: DeleteGoalOptions
+  ): Promise<StorageResult<void>> {
     return this.notImplemented<void>('deleteGoal');
   }
 
@@ -181,7 +187,8 @@ export class NativeStorageAdapterPlaceholder implements StorageAdapter {
   async deleteGoalTask(
     _vaultId: string,
     _goalId: string,
-    _taskId: string
+    _taskId: string,
+    _options: DeleteGoalTaskOptions
   ): Promise<StorageResult<void>> {
     return this.notImplemented<void>('deleteGoalTask');
   }

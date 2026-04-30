@@ -8,9 +8,10 @@
  * Run with: pnpm run test:integration
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { it, expect, afterEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import type { VaultListItem, VaultConfig } from '@goalrate-app/shared';
+import { describeTauriIntegration as describe } from '../test/tauriIntegration';
 
 // Test vault configuration
 const TEST_VAULT_PATH = '/tmp/goalrate-integration-test-vault';

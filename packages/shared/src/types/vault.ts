@@ -43,11 +43,11 @@ export interface VaultConfig {
   type: VaultType;
   created: string; // ISO date
   lastOpened?: string; // ISO date
-  // Optional sync configuration (Pro+ features)
+  // Optional sync configuration (Pro and higher)
   syncEnabled?: boolean;
   syncLastAt?: string;
   remoteId?: string; // Server-side vault ID for sync
-  // Encryption configuration (Team+ features)
+  // Encryption configuration (Team features)
   /** Whether this vault is encrypted */
   encrypted?: boolean;
   /** Encryption parameters (required if encrypted is true) */
@@ -81,7 +81,7 @@ export interface VaultSettings {
   // UI preferences
   defaultView?: 'list' | 'kanban' | 'calendar';
   showCompletedItems?: boolean;
-  // Sync preferences (Pro+)
+  // Sync preferences (Pro and higher)
   autoSync?: boolean;
   syncInterval?: number; // minutes
 }
@@ -166,7 +166,7 @@ export interface VaultListItem {
 }
 
 // ============================================================================
-// VAULT SYNC TYPES (Pro+ features)
+// VAULT SYNC TYPES (Pro and higher)
 // ============================================================================
 
 /**

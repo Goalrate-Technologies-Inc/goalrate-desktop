@@ -22,8 +22,10 @@ import type {
   TokenRefreshResponse,
 } from '../types/auth';
 
-// API base URL - should match the web app's configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// API base URL - production builds must not fall back to a local development server.
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? 'http://localhost:8000' : 'https://api.goalrate.com');
 
 /**
  * Default auth state
@@ -47,6 +49,40 @@ const AuthContext = createContext<DesktopAuthContextValue | null>(null);
  */
 export interface AuthProviderProps {
   children: ReactNode;
+}
+
+async function refreshAuthInternal(refreshToken: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!response.ok) {
+      console.warn('[Auth] Token refresh failed with status:', response.status);
+      return false;
+    }
+
+    const data: TokenRefreshResponse = await response.json();
+
+    // Calculate expiration timestamp
+    const expiresAt = Date.now() + data.expires_in * 1000;
+
+    // Update tokens in keychain
+    await invoke('update_tokens', {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt,
+    });
+
+    return true;
+  } catch (error) {
+    console.error('[Auth] Token refresh error:', error);
+    return false;
+  }
 }
 
 /**
@@ -144,43 +180,6 @@ export function AuthProvider({ children }: AuthProviderProps): React.ReactElemen
 
     initAuth();
   }, []);
-
-  /**
-   * Internal token refresh function
-   */
-  const refreshAuthInternal = async (refreshToken: string): Promise<boolean> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
-
-      if (!response.ok) {
-        console.warn('[Auth] Token refresh failed with status:', response.status);
-        return false;
-      }
-
-      const data: TokenRefreshResponse = await response.json();
-
-      // Calculate expiration timestamp
-      const expiresAt = Date.now() + data.expires_in * 1000;
-
-      // Update tokens in keychain
-      await invoke('update_tokens', {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresAt,
-      });
-
-      return true;
-    } catch (error) {
-      console.error('[Auth] Token refresh error:', error);
-      return false;
-    }
-  };
 
   /**
    * Log in with email and password

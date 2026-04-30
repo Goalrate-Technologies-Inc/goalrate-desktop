@@ -416,12 +416,34 @@ pub async fn update_goal_task(
     Ok(milestone_to_goal_task(&milestone_snapshot))
 }
 
+fn delete_milestone_from_sections(
+    sections: &mut GoalBodySections,
+    task_id: &str,
+    confirmed: bool,
+) -> Result<(), AppError> {
+    if !confirmed {
+        return Err(AppError::validation_error(
+            "Deleting a goal milestone requires explicit confirmation",
+        ));
+    }
+
+    let original_len = sections.milestones.len();
+    sections.milestones.retain(|entry| entry.id != task_id);
+
+    if sections.milestones.len() == original_len {
+        return Err(AppError::item_not_found("Milestone", task_id));
+    }
+
+    Ok(())
+}
+
 /// Delete a milestone
 #[tauri::command]
 pub async fn delete_goal_task(
     vault_id: String,
     goal_id: String,
     task_id: String,
+    confirmed: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     log::info!(
@@ -440,12 +462,7 @@ pub async fn delete_goal_task(
     let goal_file = resolve_goal_file(&vault_path, &goal_id)?;
     let (fm, mut sections) = load_goal_sections(&goal_file)?;
 
-    let original_len = sections.milestones.len();
-    sections.milestones.retain(|entry| entry.id != task_id);
-
-    if sections.milestones.len() == original_len {
-        return Err(AppError::item_not_found("Milestone", &task_id));
-    }
+    delete_milestone_from_sections(&mut sections, &task_id, confirmed.unwrap_or(false))?;
 
     write_goal_sections(&goal_file, &fm, &sections)?;
 
@@ -489,5 +506,39 @@ pub async fn complete_goal_task(
 
 #[cfg(test)]
 mod tests {
-    // Tests would require a Tauri runtime context
+    use super::{delete_milestone_from_sections, GoalBodySections, MilestoneEntry};
+
+    fn sections_with_milestone() -> GoalBodySections {
+        GoalBodySections {
+            notes: String::new(),
+            milestones: vec![MilestoneEntry {
+                id: "mil_keep".to_string(),
+                title: "Keep going".to_string(),
+                done: false,
+            }],
+            trailing: String::new(),
+            missing_ids: false,
+        }
+    }
+
+    #[test]
+    fn delete_milestone_rejects_missing_confirmation_without_changes() {
+        let mut sections = sections_with_milestone();
+
+        let error = delete_milestone_from_sections(&mut sections, "mil_keep", false)
+            .expect_err("delete should require explicit confirmation");
+
+        assert_eq!(error.code, "VALIDATION_ERROR");
+        assert!(error.message.contains("explicit confirmation"));
+        assert_eq!(sections.milestones.len(), 1);
+    }
+
+    #[test]
+    fn delete_milestone_allows_confirmed_remove() {
+        let mut sections = sections_with_milestone();
+
+        delete_milestone_from_sections(&mut sections, "mil_keep", true).unwrap();
+
+        assert!(sections.milestones.is_empty());
+    }
 }

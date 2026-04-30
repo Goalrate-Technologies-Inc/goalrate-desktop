@@ -2,6 +2,8 @@
 //!
 //! Builds the context payload from local data that gets sent to the LLM.
 
+use chrono::NaiveDate;
+
 use crate::db::DailyLoopDb;
 use crate::error::DailyLoopResult;
 use crate::prompts;
@@ -34,8 +36,14 @@ pub struct ContextPayload {
 impl ContextPayload {
     /// Combine all sections into a single user prompt string
     pub fn to_user_prompt(&self) -> String {
+        let date = chrono::Local::now().date_naive();
+        self.to_user_prompt_for_date(date)
+    }
+
+    /// Combine all sections into a single user prompt string for a specific Agenda date.
+    pub fn to_user_prompt_for_date(&self, date: NaiveDate) -> String {
         let mut prompt = String::with_capacity(self.estimated_tokens * CHARS_PER_TOKEN);
-        let today = chrono::Local::now().format("%Y-%m-%d (%A)").to_string();
+        let today = date.format("%Y-%m-%d (%A)").to_string();
         prompt.push_str(&format!("## Today's Date\n{today}\n\n"));
         prompt.push_str(&self.goals_context);
         prompt.push('\n');
@@ -53,7 +61,7 @@ impl ContextPayload {
             prompt.push_str(&self.snapshot_context);
         }
 
-        prompt.push_str("\n\nGenerate today's daily plan based on the context above.");
+        prompt.push_str("\n\nGenerate today's Agenda based on the context above.");
         prompt
     }
 }
@@ -65,15 +73,7 @@ impl ContextPayload {
 pub fn build_context(
     db: &DailyLoopDb,
     goals: &[(String, String, Option<String>)],
-    tasks: &[(
-        String,
-        String,
-        Option<String>,
-        Option<String>,
-        i32,
-        Option<String>,
-        bool,
-    )],
+    tasks: &[prompts::TaskContextRow],
 ) -> DailyLoopResult<ContextPayload> {
     let goals_context = prompts::format_goals_context(goals);
     let tasks_context = prompts::format_tasks_context(tasks);

@@ -7,6 +7,8 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime,
 };
 
+use crate::commands::app_links::{DOCS_URL, PRIVACY_POLICY_URL, REPORT_ISSUE_URL, SUPPORT_URL};
+
 /// Menu item identifiers for custom actions
 pub mod menu_ids {
     pub const NEW_VAULT: &str = "new_vault";
@@ -15,8 +17,9 @@ pub mod menu_ids {
     pub const RELOAD: &str = "reload";
     pub const TOGGLE_DEVTOOLS: &str = "toggle_devtools";
     pub const DOCS: &str = "docs";
+    pub const PRIVACY_POLICY: &str = "privacy_policy";
+    pub const SUPPORT: &str = "support";
     pub const REPORT_ISSUE: &str = "report_issue";
-    pub const CHECK_UPDATES: &str = "check_updates";
 }
 
 /// Build the application menu for the given app handle.
@@ -139,17 +142,20 @@ fn build_help_menu<R: Runtime>(
 ) -> tauri::Result<tauri::menu::Submenu<R>> {
     let docs = MenuItemBuilder::with_id(menu_ids::DOCS, "Documentation").build(app)?;
 
+    let privacy_policy =
+        MenuItemBuilder::with_id(menu_ids::PRIVACY_POLICY, "Privacy Policy").build(app)?;
+
+    let support = MenuItemBuilder::with_id(menu_ids::SUPPORT, "Support").build(app)?;
+
     let report_issue =
         MenuItemBuilder::with_id(menu_ids::REPORT_ISSUE, "Report Issue").build(app)?;
 
-    let check_updates =
-        MenuItemBuilder::with_id(menu_ids::CHECK_UPDATES, "Check for Updates...").build(app)?;
-
     let mut builder = SubmenuBuilder::new(app, "Help")
         .item(&docs)
-        .item(&report_issue)
+        .item(&privacy_policy)
+        .item(&support)
         .separator()
-        .item(&check_updates);
+        .item(&report_issue);
 
     if include_about {
         builder = builder.separator().about(None);
@@ -194,13 +200,16 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: tauri::menu::Men
 
         // Help menu actions
         menu_ids::DOCS => {
-            let _ = open::that("https://docs.goalrate.app");
+            let _ = open::that(DOCS_URL);
+        }
+        menu_ids::PRIVACY_POLICY => {
+            let _ = open::that(PRIVACY_POLICY_URL);
+        }
+        menu_ids::SUPPORT => {
+            let _ = open::that(SUPPORT_URL);
         }
         menu_ids::REPORT_ISSUE => {
-            let _ = open::that("https://github.com/goalrate/goalrate-app/issues");
-        }
-        menu_ids::CHECK_UPDATES => {
-            let _ = app.emit("menu-action", "help:check-updates");
+            let _ = open::that(REPORT_ISSUE_URL);
         }
 
         _ => {}

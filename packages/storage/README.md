@@ -36,7 +36,7 @@ const storage = createDesktopStorage();
 
 // Web app (API)
 import { createWebStorage } from '@goalrate-app/storage/web';
-const storage = createWebStorage('https://api.goalrate.app', { getAuthToken: () => token });
+const storage = createWebStorage('https://api.goalrate.com', { getAuthToken: () => token });
 
 // Mobile app (React Native)
 import { createNativeStorage } from '@goalrate-app/storage/native';
@@ -112,7 +112,7 @@ const newGoal = await storage.createGoal(vaultId, {
 await storage.updateGoal(vaultId, goalId, { progress: 50 });
 
 // Delete/Archive goal
-await storage.deleteGoal(vaultId, goalId);
+await storage.deleteGoal(vaultId, goalId, { confirmed: true });
 await storage.archiveGoal(vaultId, goalId);
 ```
 
@@ -264,7 +264,7 @@ await storage.dispose();
 ```typescript
 import { createWebStorage, ApiStorageAdapter } from '@goalrate-app/storage/web';
 
-const storage = createWebStorage('https://api.goalrate.app', {
+const storage = createWebStorage('https://api.goalrate.com', {
   getAuthToken: () => localStorage.getItem('token'),
   onAuthError: () => redirectToLogin(),
 });
@@ -301,7 +301,7 @@ storage.seedData({ goals: [mockGoal], projects: [mockProject] });
 import { createTeamStorage, TeamStorageAdapter } from '@goalrate-app/storage/team';
 
 const storage = createTeamStorage({
-  baseUrl: 'https://api.goalrate.app',
+  baseUrl: 'https://api.goalrate.com',
   getAuthToken: () => token,
   onLockRequired: (vaultId) => showPasswordPrompt(vaultId),
 });

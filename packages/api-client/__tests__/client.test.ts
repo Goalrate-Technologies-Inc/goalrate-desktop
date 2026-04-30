@@ -11,7 +11,7 @@ describe('GoalrateClient', () => {
   beforeEach(() => {
     mockFetch.mockReset();
     client = new GoalrateClient({
-      baseUrl: 'https://api.goalrate.app',
+      baseUrl: 'https://api.goalrate.com',
     });
   });
 
@@ -35,7 +35,7 @@ describe('GoalrateClient', () => {
 
     it('should set initial access token', () => {
       const clientWithToken = new GoalrateClient({
-        baseUrl: 'https://api.goalrate.app',
+        baseUrl: 'https://api.goalrate.com',
         accessToken: 'initial-token',
       });
 
@@ -87,7 +87,7 @@ describe('GoalrateClient', () => {
       await client.goals.list();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.goalrate.app/api/goals',
+        'https://api.goalrate.com/api/goals',
         expect.anything()
       );
     });
@@ -96,7 +96,7 @@ describe('GoalrateClient', () => {
       await client.projects.list();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.goalrate.app/api/projects',
+        'https://api.goalrate.com/api/projects',
         expect.anything()
       );
     });
@@ -105,7 +105,7 @@ describe('GoalrateClient', () => {
       await client.vaults.list();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.goalrate.app/api/vaults',
+        'https://api.goalrate.com/api/vaults',
         expect.anything()
       );
     });
@@ -145,7 +145,7 @@ describe('GoalrateClient', () => {
       const onTokenRefresh = vi.fn();
 
       const clientWithRefresh = new GoalrateClient({
-        baseUrl: 'https://api.goalrate.app',
+        baseUrl: 'https://api.goalrate.com',
         refreshToken: 'initial-refresh-token',
         onTokenRefresh,
       });

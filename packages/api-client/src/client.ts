@@ -27,7 +27,7 @@ import { ApiError, isApiError } from './errors';
  * @example
  * ```typescript
  * const client = new GoalrateClient({
- *   baseUrl: 'https://api.goalrate.app',
+ *   baseUrl: 'https://api.goalrate.com',
  *   accessToken: 'initial-token',
  *   onTokenRefresh: (access, refresh) => {
  *     localStorage.setItem('access_token', access);

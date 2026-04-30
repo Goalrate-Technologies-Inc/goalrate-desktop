@@ -25,7 +25,7 @@ goalrate-desktop/
 │   ├── storage/           # Storage adapter pattern
 │   ├── api-client/        # HTTP/WebSocket client
 │   ├── crypto/            # TypeScript encryption utilities
-│   └── websocket/         # WebSocket + sync management
+│   └── websocket/         # WebSocket transport utilities
 └── tooling/               # ESLint, TypeScript, Tailwind configs
 ```
 
@@ -37,34 +37,32 @@ goalrate-desktop/
 brew install --cask goalrate
 ```
 
-### Direct Download
+### Direct Mac Download
 
-Download the latest installer for your platform from the [Releases](https://github.com/Goalrate-Technologies-Inc/goalrate-desktop/releases/latest) page.
+Download the latest macOS installer from the [GoalRate download page](https://goalrate.com/download).
+
+Public Mac releases are Developer ID-signed, built with the hardened runtime, notarized by Apple, and stapled when practical. The download page is the user-facing source for release notes, install and update guidance, and links to the [Privacy Policy](https://goalrate.com/privacy), [Terms of Use](https://goalrate.com/terms), and [Support](https://goalrate.com/support).
 
 | Platform | File |
 |----------|------|
 | macOS (Universal) | `.dmg` |
-| Windows | `.exe` or `.msi` |
-| Linux | `.AppImage`, `.deb`, or `.rpm` |
-
-> **macOS note:** The app is not yet notarized with Apple. On first launch, macOS may block it. Go to **System Settings → Privacy & Security** and click **Open Anyway**.
 
 ## Prerequisites
 
 - **Node.js** >= 24 (< 26)
-- **pnpm** 8.15+
+- **pnpm** 8.15.0 (Corepack can provision the pinned version from `packageManager`)
 - **Rust** 1.75+ (with `cargo`)
-- **Tauri 2 CLI** (`cargo install tauri-cli`)
+- **Xcode Command Line Tools** on macOS if native builds fail (`xcode-select --install`)
 - macOS 10.15+ (primary target)
+
+The Tauri CLI is installed locally through this workspace; do not install a separate global `tauri-cli`.
+If `pnpm` is not available after installing Node.js, run `corepack enable` once.
 
 ## Getting Started
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Run in development mode (Vite + Tauri)
-pnpm run dev
+# Install dependencies and launch the desktop app (Vite + Tauri)
+pnpm start
 
 # Run Rust tests
 pnpm run rust:test
@@ -83,6 +81,11 @@ pnpm run typecheck
 # Build the desktop app (release)
 pnpm run build
 
+# Build the dormant/future Mac App Store app bundle
+APPLE_TEAM_ID=YOURTEAMID \
+APPLE_PROVISIONING_PROFILE=/path/to/profile.provisionprofile \
+pnpm run build:appstore
+
 # Build Rust crates only
 pnpm run rust:build:release
 
@@ -92,6 +95,8 @@ pnpm run rust:clippy
 # Format Rust code
 pnpm run rust:fmt
 ```
+
+Public Mac release artifacts require Apple Developer ID signing, hardened runtime, notarization, and stapling; see [Apple Platform Distribution](specs/apple-platform-distribution.md). Local builds may be unsigned or unstapled unless release credentials are present.
 
 ## Tech Stack
 
@@ -105,6 +110,6 @@ pnpm run rust:fmt
 
 ## License
 
-Business Source License 1.1 (`BUSL-1.1`) -- source-visible and free for individual local desktop use. Pro, Plus, team, hosted, OEM, and other production uses beyond the Additional Use Grant require a separate commercial license. See [LICENSE.md](LICENSE.md) for details.
+Business Source License 1.1 (`BUSL-1.1`) -- source-visible and free for individual local desktop use. Paid hosted features, OEM, and other production uses beyond the Additional Use Grant require a separate commercial license. See [LICENSE.md](LICENSE.md) for details.
 
 Copyright (c) 2025-2026 GoalRate Technologies Inc.

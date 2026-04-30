@@ -170,25 +170,6 @@ export function createWindowMock(): { getCurrentWindow: Mock } {
 // PLUGIN MOCKS
 // ============================================================================
 
-/**
- * Create mock for @tauri-apps/plugin-updater
- */
-export function createUpdaterMock(): { check: Mock } {
-  return {
-    check: vi.fn().mockResolvedValue(null),
-  };
-}
-
-/**
- * Create mock for @tauri-apps/plugin-process
- */
-export function createProcessMock(): { relaunch: Mock; exit: Mock } {
-  return {
-    relaunch: vi.fn().mockResolvedValue(undefined),
-    exit: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
 // ============================================================================
 // COMMAND RESPONSES
 // ============================================================================

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Settings, ChevronDown, X } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useDailyLoop } from '../hooks/useDailyLoop';
@@ -9,6 +9,31 @@ import { AiChatPanel } from './daily-loop/AiChatPanel';
 import { IntakeFlow } from './daily-loop/IntakeFlow';
 import { SettingsPanel } from './daily-loop/SettingsPanel';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import {
+  vaultRefreshStatusLabel,
+  vaultUpdatePaths,
+  type VaultLibraryUpdatedPayload,
+} from '../lib/vaultWatcherEvents';
+import { attachTauriEventListener } from '../lib/tauriEvents';
+
+interface VaultRefreshStatus {
+  label: string;
+  refreshedAt: Date;
+}
+
+interface GoalNotesRequest {
+  requestId: number;
+  goalId: string;
+  title: string;
+}
+
+function formatRefreshTime(value: Date): string {
+  const hours = value.getHours();
+  const minutes = String(value.getMinutes()).padStart(2, '0');
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${minutes} ${period}`;
+}
 
 export function DailyLoopApp(): React.ReactElement {
   const dailyLoop = useDailyLoop();
@@ -17,6 +42,10 @@ export function DailyLoopApp(): React.ReactElement {
   const [vaultToRemove, setVaultToRemove] = useState<{ id: string; name: string } | null>(null);
   const [showVaultPicker, setShowVaultPicker] = useState(false);
   const [goalCheck, setGoalCheck] = useState<{ vaultId?: string; hasGoals: boolean | null }>({ hasGoals: null });
+  const [vaultRefreshStatus, setVaultRefreshStatus] = useState<VaultRefreshStatus | null>(null);
+  const [goalNotesRequest, setGoalNotesRequest] = useState<GoalNotesRequest | null>(null);
+  const vaultRefreshTimerRef = useRef<number | null>(null);
+  const goalNotesRequestIdRef = useRef(0);
   const vaultId = currentVault?.id;
 
   // Check if user needs intake flow (no goals exist); resets on vault change
@@ -41,6 +70,44 @@ export function DailyLoopApp(): React.ReactElement {
     return () => { cancelled = true; };
   }, [vaultId]);
 
+  useEffect(() => {
+    if (!vaultId) {return;}
+
+    const detach = attachTauriEventListener<VaultLibraryUpdatedPayload>(
+      'vault-library-updated',
+      (event) => {
+        if (event.payload?.vaultId !== vaultId) {
+          return;
+        }
+
+        setVaultRefreshStatus({
+          label: vaultRefreshStatusLabel(vaultUpdatePaths(event.payload)),
+          refreshedAt: new Date(),
+        });
+        if (vaultRefreshTimerRef.current !== null) {
+          window.clearTimeout(vaultRefreshTimerRef.current);
+        }
+        vaultRefreshTimerRef.current = window.setTimeout(() => {
+          setVaultRefreshStatus(null);
+          vaultRefreshTimerRef.current = null;
+        }, 3000);
+      },
+      {
+        onError: (err) => {
+          console.error('[DailyLoopApp] Failed to listen for vault changes:', err);
+        },
+      },
+    );
+
+    return () => {
+      detach();
+      if (vaultRefreshTimerRef.current !== null) {
+        window.clearTimeout(vaultRefreshTimerRef.current);
+        vaultRefreshTimerRef.current = null;
+      }
+    };
+  }, [vaultId]);
+
   const hasGoals = goalCheck.vaultId === vaultId ? goalCheck.hasGoals : null;
   const needsIntake = !vaultId || hasGoals === false;
   const isLoading = !!vaultId && hasGoals === null;
@@ -49,6 +116,23 @@ export function DailyLoopApp(): React.ReactElement {
     setGoalCheck({ vaultId, hasGoals: true });
     await dailyLoop.refresh();
   }, [vaultId, dailyLoop]);
+
+  const handleVaultRestored = useCallback(async () => {
+    if (vaultId) {
+      const goals = await invoke<Array<{ id: string }>>('list_goals', { vaultId });
+      setGoalCheck({ vaultId, hasGoals: goals.length > 0 });
+    }
+    await dailyLoop.refresh();
+  }, [vaultId, dailyLoop]);
+
+  const handleOpenGoalNotes = useCallback((goalId: string, title: string) => {
+    goalNotesRequestIdRef.current += 1;
+    setGoalNotesRequest({
+      requestId: goalNotesRequestIdRef.current,
+      goalId,
+      title,
+    });
+  }, []);
 
   const handleSelectVault = useCallback(
     async (vaultPath: string) => {
@@ -130,6 +214,20 @@ export function DailyLoopApp(): React.ReactElement {
               </div>
             )}
           </div>
+          {vaultRefreshStatus && (
+            <span
+              aria-live="polite"
+              title={`Last refreshed at ${formatRefreshTime(vaultRefreshStatus.refreshedAt)}`}
+              className="rounded-full border px-2 py-0.5 text-[11px] font-medium"
+              style={{
+                borderColor: 'var(--border-light)',
+                color: 'var(--text-muted)',
+                backgroundColor: 'var(--surface)',
+              }}
+            >
+              {vaultRefreshStatus.label}
+            </span>
+          )}
         </div>
 
         <button
@@ -160,15 +258,25 @@ export function DailyLoopApp(): React.ReactElement {
 
       {!isLoading && !needsIntake && (
         <div className="flex min-h-0 flex-1">
-          <DomainSidebar dataVersion={dailyLoop.dataVersion} onMutation={() => dailyLoop.refresh()} />
-          <TodaysPlan dailyLoop={dailyLoop} />
+          <DomainSidebar
+            dataVersion={dailyLoop.dataVersion}
+            onMutation={() => dailyLoop.refresh()}
+            openGoalRequest={goalNotesRequest}
+          />
+          <TodaysPlan
+            dailyLoop={dailyLoop}
+            onOpenGoalNotes={handleOpenGoalNotes}
+          />
           <AiChatPanel dailyLoop={dailyLoop} />
         </div>
       )}
 
       {/* Settings slide-over */}
       {showSettings && (
-        <SettingsPanel onClose={() => setShowSettings(false)} />
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
+          onVaultRestored={handleVaultRestored}
+        />
       )}
 
       {/* Remove vault confirmation */}

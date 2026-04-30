@@ -8,7 +8,7 @@
  * import { GoalrateClient } from '@goalrate-app/api-client';
  *
  * const client = new GoalrateClient({
- *   baseUrl: 'https://api.goalrate.app',
+ *   baseUrl: 'https://api.goalrate.com',
  *   accessToken: getStoredToken(),
  *   onAuthError: () => redirectToLogin(),
  * });

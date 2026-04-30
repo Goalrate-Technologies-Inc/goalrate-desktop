@@ -9,6 +9,7 @@
 *.pem
 *.p12
 *.pfx
+*.provisionprofile
 secrets.json
 config/secrets.*
 credentials.*
@@ -140,6 +141,8 @@ local.*
 .playwright-mcp/
 .vault.json
 .goalrate/
+apps/desktop/src-tauri/Entitlements.appstore.plist
+apps/desktop/src-tauri/embedded.provisionprofile
 .cargo/*
 !.cargo/config.toml
 

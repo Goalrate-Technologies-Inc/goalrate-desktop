@@ -71,7 +71,7 @@ export default function LoginPage(): React.ReactElement {
             <div className="space-y-2">
               <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
               <CardDescription className="text-base">
-                Sign in to sync your goals across devices
+                Sign in to your GoalRate account
               </CardDescription>
             </div>
 
@@ -184,7 +184,7 @@ export default function LoginPage(): React.ReactElement {
             <p className="text-center text-xs text-muted-foreground">
               You can use the app offline without signing in.
               <br />
-              Sign in to sync your data across devices.
+              Local vault workflows stay available either way.
             </p>
 
             {/* Register link */}

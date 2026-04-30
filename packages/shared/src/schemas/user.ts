@@ -14,7 +14,7 @@ import { emailSchema } from './common';
 /**
  * Subscription plan identifier
  */
-export const planIdSchema = z.enum(['free', 'pro', 'team', 'enterprise']);
+export const planIdSchema = z.enum(['free', 'plus', 'pro', 'premium']);
 
 /**
  * Billing cycle options
@@ -99,6 +99,12 @@ export const planConfigSchema = z.object({
     monthly: z.number().nonnegative(),
     yearly: z.number().nonnegative(),
   }),
+  stripe_price_ids: z
+    .object({
+      monthly: z.string().optional(),
+      yearly: z.string().optional(),
+    })
+    .optional(),
   limits: planLimitsSchema,
 });
 

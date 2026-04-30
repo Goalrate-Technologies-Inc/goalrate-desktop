@@ -22,12 +22,6 @@ pub enum VaultEvent {
     GoalTaskModified { goal_id: String, task_id: String },
     /// A goal task was deleted
     GoalTaskDeleted { goal_id: String, task_id: String },
-    /// A project was created
-    ProjectCreated(String),
-    /// A project was modified
-    ProjectModified(String),
-    /// A project was deleted
-    ProjectDeleted(String),
     /// A focus file was modified
     FocusModified(String),
     /// The vault config was modified
@@ -151,21 +145,6 @@ impl VaultWatcher {
             }
         }
 
-        // Project files
-        if path_str.contains("/projects/") && path_str.ends_with("/project.md") {
-            let parts: Vec<&str> = path_str.split("/projects/").collect();
-            if parts.len() > 1 {
-                let project_id = parts[1].trim_end_matches("/project.md").to_string();
-                return Ok(if is_create {
-                    VaultEvent::ProjectCreated(project_id)
-                } else if is_remove {
-                    VaultEvent::ProjectDeleted(project_id)
-                } else {
-                    VaultEvent::ProjectModified(project_id)
-                });
-            }
-        }
-
         // Unknown event
         Ok(VaultEvent::Unknown(path_str.into()))
     }
@@ -225,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn test_classify_project_deleted() {
+    fn test_classify_project_markdown_as_unknown_for_desktop_mvp() {
         let event = make_event(
             "/vault/projects/my-project/project.md",
             EventKind::Remove(RemoveKind::File),
@@ -233,7 +212,7 @@ mod tests {
         let watcher_event = VaultWatcher::classify_event_standalone(&event).unwrap();
         assert_eq!(
             watcher_event,
-            VaultEvent::ProjectDeleted("my-project".into())
+            VaultEvent::Unknown("/vault/projects/my-project/project.md".into())
         );
     }
 
@@ -294,20 +273,6 @@ mod tests {
                             });
                         }
                     }
-                }
-            }
-
-            if path_str.contains("/projects/") && path_str.ends_with("/project.md") {
-                let parts: Vec<&str> = path_str.split("/projects/").collect();
-                if parts.len() > 1 {
-                    let project_id = parts[1].trim_end_matches("/project.md").to_string();
-                    return Ok(if is_create {
-                        VaultEvent::ProjectCreated(project_id)
-                    } else if is_remove {
-                        VaultEvent::ProjectDeleted(project_id)
-                    } else {
-                        VaultEvent::ProjectModified(project_id)
-                    });
                 }
             }
 

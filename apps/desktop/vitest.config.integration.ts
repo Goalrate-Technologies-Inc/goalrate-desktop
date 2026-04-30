@@ -23,12 +23,8 @@ export default defineConfig({
     hookTimeout: 30000,
     // Run sequentially to avoid race conditions with file system
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
-    // Disable parallelism for integration tests
+    // Disable file parallelism for native filesystem integration tests
+    fileParallelism: false,
     sequence: {
       shuffle: false,
     },

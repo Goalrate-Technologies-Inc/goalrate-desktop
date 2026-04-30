@@ -91,7 +91,7 @@ export interface ProfileData {
 /**
  * Subscription plan identifier
  */
-export type PlanId = 'free' | 'pro' | 'team' | 'enterprise';
+export type PlanId = 'free' | 'plus' | 'pro' | 'premium';
 
 /**
  * Billing cycle options
@@ -167,6 +167,10 @@ export interface PlanConfig {
   price: {
     monthly: number;
     yearly: number;
+  };
+  stripe_price_ids?: {
+    monthly?: string;
+    yearly?: string;
   };
   limits: PlanLimits;
 }

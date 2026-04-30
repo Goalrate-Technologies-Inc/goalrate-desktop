@@ -12,6 +12,8 @@
 import type {
   StorageAdapter,
   StorageResult,
+  DeleteGoalOptions,
+  DeleteGoalTaskOptions,
   GoalQueryOptions,
   ProjectQueryOptions,
   SprintQueryOptions,
@@ -133,7 +135,11 @@ export class DesktopStorageAdapterPlaceholder implements StorageAdapter {
     return this.notImplemented<SmartGoal>('updateGoal');
   }
 
-  async deleteGoal(_vaultId: string, _goalId: string): Promise<StorageResult<void>> {
+  async deleteGoal(
+    _vaultId: string,
+    _goalId: string,
+    _options: DeleteGoalOptions
+  ): Promise<StorageResult<void>> {
     return this.notImplemented<void>('deleteGoal');
   }
 
@@ -174,7 +180,8 @@ export class DesktopStorageAdapterPlaceholder implements StorageAdapter {
   async deleteGoalTask(
     _vaultId: string,
     _goalId: string,
-    _taskId: string
+    _taskId: string,
+    _options: DeleteGoalTaskOptions
   ): Promise<StorageResult<void>> {
     return this.notImplemented<void>('deleteGoalTask');
   }
