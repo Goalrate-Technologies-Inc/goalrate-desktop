@@ -81,11 +81,6 @@ pnpm run typecheck
 # Build the desktop app (release)
 pnpm run build
 
-# Build the dormant/future Mac App Store app bundle
-APPLE_TEAM_ID=YOURTEAMID \
-APPLE_PROVISIONING_PROFILE=/path/to/profile.provisionprofile \
-pnpm run build:appstore
-
 # Build Rust crates only
 pnpm run rust:build:release
 

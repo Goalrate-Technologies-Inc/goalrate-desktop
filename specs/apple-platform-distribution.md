@@ -67,8 +67,8 @@ The launch plan ladder stays the same everywhere: Free and Plus. Future plan ide
 
 ## Current Implementation Notes
 
-- Existing Mac App Store build scripts, StoreKit helpers, and `tauri.appstore.conf.json` are no longer the initial production distribution path.
-- Keep those artifacts only if they remain useful for future experiments or mobile-related StoreKit reference work; do not let them drive product copy or launch sequencing.
+- Mac App Store build scripts, StoreKit helpers, and sandbox entitlement artifacts are intentionally absent from the desktop launch branch.
+- Reintroduce Apple purchase or sandbox build artifacts only when there is a concrete iOS, iPadOS, or Mac App Store target to support.
 - The current direct/dev build behavior may retain local engineering affordances, but production paid AI should use hosted entitlement checks.
 
 ## Source Notes

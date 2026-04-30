@@ -72,11 +72,7 @@ fn hosted_ai_required() -> bool {
         || option_env!("GOALRATE_REQUIRE_HOSTED_AI")
             .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True"))
             .unwrap_or(false)
-        || option_env!("GOALRATE_APP_STORE_BUILD")
-            .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True"))
-            .unwrap_or(false)
         || truthy_env("GOALRATE_REQUIRE_HOSTED_AI")
-        || truthy_env("GOALRATE_APP_STORE_BUILD")
         || !cfg!(debug_assertions)
 }
 

@@ -148,8 +148,6 @@ function installAcceptanceInvokeMock(state: AcceptanceState): void {
       case "get_tokens":
       case "get_stored_user":
         return null;
-      case "get_app_store_subscription_status":
-        throw new Error("StoreKit is unavailable in tests");
       case "list_vaults":
         return state.vaults.map((vault) => ({ ...vault }));
       case "create_vault": {

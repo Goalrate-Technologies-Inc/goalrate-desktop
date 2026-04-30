@@ -51,11 +51,6 @@ use commands::integrations::{
     set_openai_api_key,
 };
 use commands::memory::save_memory;
-use commands::subscriptions::{
-    get_app_store_subscription_status, get_plus_subscription_product,
-    open_app_store_subscription_management, purchase_plus_subscription,
-    restore_app_store_purchases,
-};
 use commands::vault::{
     close_vault, create_vault, delete_vault, get_user_vaults, get_vault_stats, greet,
     link_vault_to_user, list_vault_error_log_entries, list_vault_snapshots, list_vaults,
@@ -219,12 +214,6 @@ pub fn run() {
             assess_goal_priority,
             generate_goal_tasks,
             save_memory,
-            // Subscription and dormant StoreKit commands
-            get_plus_subscription_product,
-            get_app_store_subscription_status,
-            purchase_plus_subscription,
-            restore_app_store_purchases,
-            open_app_store_subscription_management,
             // Integration commands
             check_api_keys,
             set_openai_api_key,

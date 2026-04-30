@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  normalizeStoreKitDevSubscriptionStatus,
   normalizeSubscriptionStatus,
   subscriptionAllowsAi,
   subscriptionHasEntitlement,
@@ -105,34 +104,5 @@ describe("Stripe subscription state mapping", () => {
       expect(status.active).toBe(false);
       expect(subscriptionAllowsAi(status)).toBe(false);
     }
-  });
-});
-
-describe("StoreKit development override mapping", () => {
-  it("maps active StoreKit debug status to Plus", () => {
-    const status = normalizeStoreKitDevSubscriptionStatus({
-      state: "active",
-      active: true,
-      checkedAt: "2026-04-29T00:00:00Z",
-    });
-
-    expect(status?.planId).toBe("plus");
-    expect(status?.state).toBe("active");
-    expect(status?.source).toBe("storekit");
-    expect(subscriptionAllowsAi(status)).toBe(true);
-  });
-
-  it("maps non-entitled StoreKit debug states to Free", () => {
-    for (const state of ["billingRetry", "expired", "revoked", "pending"] as const) {
-      const status = normalizeStoreKitDevSubscriptionStatus({ state });
-      expect(status?.planId).toBe("free");
-      expect(status?.active).toBe(false);
-      expect(subscriptionAllowsAi(status)).toBe(false);
-    }
-  });
-
-  it("ignores the default StoreKit none state so account billing can still load", () => {
-    expect(normalizeStoreKitDevSubscriptionStatus({ state: "none" })).toBeNull();
-    expect(normalizeStoreKitDevSubscriptionStatus(null)).toBeNull();
   });
 });

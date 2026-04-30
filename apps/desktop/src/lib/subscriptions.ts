@@ -36,7 +36,7 @@ export type SubscriptionState =
   | "pending"
   | "unavailable";
 
-export type SubscriptionSource = "stripe" | "storekit" | "none" | "unavailable";
+export type SubscriptionSource = "stripe" | "none" | "unavailable";
 
 export interface SubscriptionPeriod {
   unit: "day" | "week" | "month" | "year" | "unknown";
@@ -95,16 +95,6 @@ interface CheckoutSessionResponse {
 interface BillingPortalResponse {
   url?: string;
   portal_url?: string;
-}
-
-interface StoreKitSubscriptionStatus {
-  planId?: LaunchPlanId | string;
-  state?: string;
-  active?: boolean;
-  willRenew?: boolean | null;
-  expiresAt?: string | null;
-  checkedAt?: string;
-  managementUrl?: string | null;
 }
 
 export const FALLBACK_PLUS_PRODUCT: SubscriptionProduct = {
@@ -283,71 +273,6 @@ export function subscriptionAllowsAi(
   return subscriptionHasEntitlement(status, "aiPlanning");
 }
 
-function normalizeStoreKitSubscriptionState(
-  rawState: string | null | undefined,
-): SubscriptionState {
-  switch (rawState) {
-    case "active":
-      return "active";
-    case "activeCanceled":
-      return "activeCanceled";
-    case "grace":
-    case "gracePeriod":
-      return "gracePeriod";
-    case "billing_retry":
-    case "billingRetry":
-      return "billingRetry";
-    case "expired":
-      return "expired";
-    case "revoked":
-      return "revoked";
-    case "pending":
-      return "pending";
-    case "unavailable":
-      return "unavailable";
-    default:
-      return "none";
-  }
-}
-
-export function normalizeStoreKitDevSubscriptionStatus(
-  status: StoreKitSubscriptionStatus | null | undefined,
-): BillingSubscriptionStatus | null {
-  const state = normalizeStoreKitSubscriptionState(status?.state);
-  if (state === "none") {
-    return null;
-  }
-
-  const planId = stateIsEntitled(state) ? "plus" : "free";
-  const source = state === "unavailable" ? "unavailable" : "storekit";
-
-  return defaultFreeSubscriptionStatus({
-    planId,
-    state,
-    active: stateIsEntitled(state) && planAllowsAi(planId),
-    willRenew: status?.willRenew ?? null,
-    source,
-    expiresAt: status?.expiresAt ?? null,
-    checkedAt: status?.checkedAt ?? new Date().toISOString(),
-    managementUrl: status?.managementUrl ?? null,
-  });
-}
-
-async function getStoreKitDevSubscriptionStatus(): Promise<BillingSubscriptionStatus | null> {
-  if (!import.meta.env.DEV || !isTauriRuntime()) {
-    return null;
-  }
-
-  try {
-    const status = await invoke<StoreKitSubscriptionStatus>(
-      "get_app_store_subscription_status",
-    );
-    return normalizeStoreKitDevSubscriptionStatus(status);
-  } catch {
-    return null;
-  }
-}
-
 export async function getPlusSubscriptionProduct(): Promise<SubscriptionProduct> {
   if (import.meta.env.DEV && !HAS_CONFIGURED_API_BASE_URL) {
     return FALLBACK_PLUS_PRODUCT;
@@ -369,11 +294,6 @@ export async function getPlusSubscriptionProduct(): Promise<SubscriptionProduct>
 }
 
 export async function getSubscriptionStatus(): Promise<BillingSubscriptionStatus> {
-  const storeKitDevStatus = await getStoreKitDevSubscriptionStatus();
-  if (storeKitDevStatus) {
-    return storeKitDevStatus;
-  }
-
   const accessToken = await getStoredAccessToken();
   if (!accessToken) {
     return defaultFreeSubscriptionStatus({

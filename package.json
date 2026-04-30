@@ -10,7 +10,6 @@
     "start": "pnpm install --frozen-lockfile && pnpm run dev",
     "dev": "turbo run tauri:dev --filter=@goalrate-app/desktop",
     "build": "turbo run tauri:build --filter=@goalrate-app/desktop",
-    "build:appstore": "pnpm --filter @goalrate-app/desktop run tauri:build:appstore",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

@@ -22,7 +22,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sqlite-index",
- "swift-rs",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

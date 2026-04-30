@@ -12,8 +12,6 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "prepare:appstore": "node ./scripts/prepare-appstore.mjs",
-    "tauri:build:appstore": "pnpm run prepare:appstore && GOALRATE_APP_STORE_BUILD=true VITE_GOALRATE_APP_STORE_BUILD=true tauri build --bundles app --target universal-apple-darwin --config src-tauri/tauri.appstore.conf.json",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
