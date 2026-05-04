@@ -80,24 +80,6 @@ fn is_hosted_ai_build() -> bool {
     hosted_ai_required()
 }
 
-/// Mock response for Agenda generation.
-const MOCK_PLAN_RESPONSE: &str = r#"{
-  "top_3_outcomes": [
-    {"title": "Ship core feature", "linked_task_ids": ["task_1", "task_2"]},
-    {"title": "Clear review backlog", "linked_task_ids": ["task_3"]},
-    {"title": "Prepare sprint demo", "linked_task_ids": ["task_4"]}
-  ],
-  "ordered_tasks": [
-    {"id": "task_1", "title": "Finish core feature implementation", "goal_id": "goal_mock_launch", "recurring": "none"},
-    {"id": "task_2", "title": "Run acceptance checks", "goal_id": "goal_mock_launch", "recurring": "none"},
-    {"id": "task_3", "title": "Review open pull requests", "goal_id": "goal_mock_review", "recurring": "none"},
-    {"id": "task_4", "title": "Assemble sprint demo notes", "goal_id": "goal_mock_demo", "recurring": "none"}
-  ],
-  "daily_insight": "[MOCK] Focus on deep work before noon — your completion rate peaks in the morning.",
-  "pattern_note": "",
-  "deferrals_confrontation": []
-}"#;
-
 /// Mock response for chat reprioritization.
 const MOCK_CHAT_RESPONSE: &str = r#"{
   "message": "[MOCK] Got it — I've noted your request and adjusted the plan accordingly.",
@@ -149,25 +131,27 @@ const MOCK_SUMMARY_RESPONSE: &str =
      One task was deferred; consider tackling it first thing tomorrow.";
 
 /// Return a mock response if mock mode is active, matching the prompt type.
+///
+/// Agenda generation intentionally does not have a mock response. It must call a
+/// real provider so users never receive canned plans.
 fn mock_llm_response(system_prompt: &str) -> Option<String> {
     if !is_mock_mode() {
         return None;
     }
     // Match on known system prompt prefixes
-    if std::ptr::eq(system_prompt, DAILY_PLAN_SYSTEM_PROMPT) {
-        Some(MOCK_PLAN_RESPONSE.to_string())
-    } else if std::ptr::eq(system_prompt, CHAT_REPRIORITIZE_SYSTEM_PROMPT) {
+    let prompt_lower = system_prompt.to_lowercase();
+    if system_prompt == DAILY_PLAN_SYSTEM_PROMPT
+        || prompt_lower.contains("agenda")
+        || prompt_lower.contains("daily plan")
+    {
+        None
+    } else if system_prompt == CHAT_REPRIORITIZE_SYSTEM_PROMPT {
         Some(MOCK_CHAT_RESPONSE.to_string())
-    } else if std::ptr::eq(system_prompt, CHECK_IN_SUMMARY_PROMPT) {
+    } else if system_prompt == CHECK_IN_SUMMARY_PROMPT {
         Some(MOCK_SUMMARY_RESPONSE.to_string())
     } else {
         // Fallback: heuristic matching by content
-        if system_prompt.contains("Agenda")
-            || system_prompt.contains("daily plan")
-            || system_prompt.contains("Daily Plan")
-        {
-            Some(MOCK_PLAN_RESPONSE.to_string())
-        } else if system_prompt.contains("reprioritize") || system_prompt.contains("adjust") {
+        if system_prompt.contains("reprioritize") || system_prompt.contains("adjust") {
             Some(MOCK_CHAT_RESPONSE.to_string())
         } else if system_prompt.contains("summary") || system_prompt.contains("summariz") {
             Some(MOCK_SUMMARY_RESPONSE.to_string())
@@ -6133,8 +6117,18 @@ mod tests {
     }
 
     #[test]
-    fn mock_plan_response_includes_visible_task_titles() {
-        let parsed: Value = serde_json::from_str(MOCK_PLAN_RESPONSE).unwrap();
+    fn generated_plan_response_includes_visible_task_titles() {
+        let parsed: Value = serde_json::from_str(
+            r#"{
+              "ordered_tasks": [
+                {"id": "task_1", "title": "Finish core feature implementation", "goal_id": "goal_mock_launch", "recurring": "none"},
+                {"id": "task_2", "title": "Run acceptance checks", "goal_id": "goal_mock_launch", "recurring": "none"},
+                {"id": "task_3", "title": "Review open pull requests", "goal_id": "goal_mock_review", "recurring": "none"},
+                {"id": "task_4", "title": "Assemble sprint demo notes", "goal_id": "goal_mock_demo", "recurring": "none"}
+              ]
+            }"#,
+        )
+        .unwrap();
         let ordered = parse_ordered_tasks_from_ai(&parsed, &std::collections::HashMap::new());
 
         assert_eq!(
