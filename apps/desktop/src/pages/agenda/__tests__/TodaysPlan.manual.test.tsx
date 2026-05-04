@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { DailyPlan, ScheduledTask } from "@goalrate-app/shared";
 import { describe, expect, it, vi } from "vitest";
-import type { UseDailyLoopReturn } from "../../../hooks/useDailyLoop";
+import type { UseAgendaReturn } from "../../../hooks/useAgenda";
 import { TodaysPlan } from "../TodaysPlan";
 
 function scheduledTask(
@@ -21,13 +21,13 @@ function scheduledTask(
   };
 }
 
-function dailyLoopWithSchedule(
+function agendaWithSchedule(
   scheduledTasks: ScheduledTask[],
   updateScheduledTasks = vi.fn().mockResolvedValue(undefined),
   agendaWarnings: string[] = [],
   openAgendaErrorLog = vi.fn().mockResolvedValue(undefined),
-  taskMetadata: UseDailyLoopReturn["taskMetadata"] = {},
-): UseDailyLoopReturn {
+  taskMetadata: UseAgendaReturn["taskMetadata"] = {},
+): UseAgendaReturn {
   const plan: DailyPlan = {
     id: "plan_2026_04_26",
     date: "2026-04-26",
@@ -77,7 +77,7 @@ function dailyLoopWithSchedule(
     setDate: vi.fn(),
     refresh: vi.fn().mockResolvedValue(undefined),
     dataVersion: 0,
-  } as UseDailyLoopReturn & {
+  } as UseAgendaReturn & {
     openAgendaErrorLog: () => Promise<void>;
   };
 }
@@ -85,7 +85,7 @@ function dailyLoopWithSchedule(
 describe("TodaysPlan manual Agenda editing", () => {
   it("opens the parent goal notes when an Agenda task title is clicked", () => {
     const onOpenGoalNotes = vi.fn();
-    const dailyLoop = dailyLoopWithSchedule(
+    const agenda = agendaWithSchedule(
       [scheduledTask("task_alpha", "Alpha task", "9:00 AM", 30)],
       vi.fn().mockResolvedValue(undefined),
       [],
@@ -103,7 +103,7 @@ describe("TodaysPlan manual Agenda editing", () => {
 
     render(
       <TodaysPlan
-        dailyLoop={dailyLoop}
+        agenda={agenda}
         onOpenGoalNotes={onOpenGoalNotes}
       />,
     );
@@ -122,8 +122,8 @@ describe("TodaysPlan manual Agenda editing", () => {
 
   it("removes a Goal-backed task from the Agenda without deleting it from the Roadmap", async () => {
     const updateScheduledTasks = vi.fn().mockResolvedValue(undefined);
-    const dailyLoop = {
-      ...dailyLoopWithSchedule(
+    const agenda = {
+      ...agendaWithSchedule(
         [
           scheduledTask("task_alpha", "Alpha task", "9:00 AM", 30),
           scheduledTask("subtask_alpha_child", "Alpha child", "9:30 AM", 15),
@@ -142,9 +142,9 @@ describe("TodaysPlan manual Agenda editing", () => {
           },
         },
       ),
-    } satisfies UseDailyLoopReturn;
+    } satisfies UseAgendaReturn;
 
-    render(<TodaysPlan dailyLoop={dailyLoop} />);
+    render(<TodaysPlan agenda={agenda} />);
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -167,12 +167,12 @@ describe("TodaysPlan manual Agenda editing", () => {
 
   it("adds a manual Agenda item with a concrete scheduled task", async () => {
     const updateScheduledTasks = vi.fn().mockResolvedValue(undefined);
-    const dailyLoop = dailyLoopWithSchedule(
+    const agenda = agendaWithSchedule(
       [scheduledTask("task_alpha", "Alpha task", "9:00 AM", 30)],
       updateScheduledTasks,
     );
 
-    render(<TodaysPlan dailyLoop={dailyLoop} />);
+    render(<TodaysPlan agenda={agenda} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Add Agenda item" }));
     expect(screen.getByLabelText("New Agenda item start time")).toHaveAttribute(
@@ -211,9 +211,9 @@ describe("TodaysPlan manual Agenda editing", () => {
 
   it("adds the first manual Agenda item to an empty local Agenda", async () => {
     const updateScheduledTasks = vi.fn().mockResolvedValue(undefined);
-    const dailyLoop = dailyLoopWithSchedule([], updateScheduledTasks);
+    const agenda = agendaWithSchedule([], updateScheduledTasks);
 
-    render(<TodaysPlan dailyLoop={dailyLoop} />);
+    render(<TodaysPlan agenda={agenda} />);
 
     expect(
       screen.getByText(
@@ -246,12 +246,12 @@ describe("TodaysPlan manual Agenda editing", () => {
 
   it("persists manual row edits through scheduled tasks", async () => {
     const updateScheduledTasks = vi.fn().mockResolvedValue(undefined);
-    const dailyLoop = dailyLoopWithSchedule(
+    const agenda = agendaWithSchedule(
       [scheduledTask("task_alpha", "Alpha task", "9:00 AM", 30)],
       updateScheduledTasks,
     );
 
-    render(<TodaysPlan dailyLoop={dailyLoop} />);
+    render(<TodaysPlan agenda={agenda} />);
 
     fireEvent.click(screen.getByRole("button", { name: 'Edit "Alpha task"' }));
     fireEvent.change(screen.getByLabelText("Agenda item title"), {
@@ -281,7 +281,7 @@ describe("TodaysPlan manual Agenda editing", () => {
 
   it("cascades later Agenda start times after a row time edit", async () => {
     const updateScheduledTasks = vi.fn().mockResolvedValue(undefined);
-    const dailyLoop = dailyLoopWithSchedule(
+    const agenda = agendaWithSchedule(
       [
         scheduledTask("task_alpha", "Alpha task", "9:00 AM", 30),
         scheduledTask("task_beta", "Beta task", "9:30 AM", 45),
@@ -290,7 +290,7 @@ describe("TodaysPlan manual Agenda editing", () => {
       updateScheduledTasks,
     );
 
-    render(<TodaysPlan dailyLoop={dailyLoop} />);
+    render(<TodaysPlan agenda={agenda} />);
 
     fireEvent.click(screen.getByRole("button", { name: 'Edit "Beta task"' }));
     fireEvent.change(screen.getByLabelText("Agenda item start time"), {
@@ -319,7 +319,7 @@ describe("TodaysPlan manual Agenda editing", () => {
   });
 
   it("shows Agenda reconciliation warnings without blocking the schedule", () => {
-    const dailyLoop = dailyLoopWithSchedule(
+    const agenda = agendaWithSchedule(
       [scheduledTask("task_alpha", "Alpha task", "9:00 AM", 30)],
       vi.fn().mockResolvedValue(undefined),
       [
@@ -327,7 +327,7 @@ describe("TodaysPlan manual Agenda editing", () => {
       ],
     );
 
-    render(<TodaysPlan dailyLoop={dailyLoop} />);
+    render(<TodaysPlan agenda={agenda} />);
 
     expect(screen.getByText("Agenda needs a small vault repair")).toBeTruthy();
     expect(screen.getAllByText(/logs\/errors\.md/).length).toBeGreaterThan(0);
@@ -336,7 +336,7 @@ describe("TodaysPlan manual Agenda editing", () => {
 
   it("opens the Agenda error log from reconciliation warnings", async () => {
     const openAgendaErrorLog = vi.fn().mockResolvedValue(undefined);
-    const dailyLoop = dailyLoopWithSchedule(
+    const agenda = agendaWithSchedule(
       [scheduledTask("task_alpha", "Alpha task", "9:00 AM", 30)],
       vi.fn().mockResolvedValue(undefined),
       [
@@ -345,7 +345,7 @@ describe("TodaysPlan manual Agenda editing", () => {
       openAgendaErrorLog,
     );
 
-    render(<TodaysPlan dailyLoop={dailyLoop} />);
+    render(<TodaysPlan agenda={agenda} />);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Open logs/errors.md" }),

@@ -1,15 +1,15 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DailyLoopApp } from "../DailyLoopApp";
+import { AgendaApp } from "../AgendaApp";
 
 const vaultMocks = vi.hoisted(() => ({
   closeVault: vi.fn(),
   refreshVaults: vi.fn(),
 }));
 
-vi.mock("../../hooks/useDailyLoop", () => ({
-  useDailyLoop: () => ({
+vi.mock("../../hooks/useAgenda", () => ({
+  useAgenda: () => ({
     dataVersion: 0,
     refresh: vi.fn().mockResolvedValue(undefined),
   }),
@@ -44,29 +44,29 @@ vi.mock("../../context/VaultContext", async () => {
   };
 });
 
-vi.mock("../daily-loop/DomainSidebar", () => ({
+vi.mock("../agenda/DomainSidebar", () => ({
   DomainSidebar: () => <div>Roadmap panel</div>,
 }));
 
-vi.mock("../daily-loop/TodaysPlan", () => ({
+vi.mock("../agenda/TodaysPlan", () => ({
   TodaysPlan: () => <div>Agenda panel</div>,
 }));
 
-vi.mock("../daily-loop/AiChatPanel", () => ({
+vi.mock("../agenda/AiChatPanel", () => ({
   AiChatPanel: () => <div>Assistant panel</div>,
 }));
 
-vi.mock("../daily-loop/IntakeFlow", () => ({
+vi.mock("../agenda/IntakeFlow", () => ({
   IntakeFlow: ({ hasVault }: { hasVault: boolean }) => (
     <div>{hasVault ? "Intake with vault" : "Intake without vault"}</div>
   ),
 }));
 
-vi.mock("../daily-loop/SettingsPanel", () => ({
+vi.mock("../agenda/SettingsPanel", () => ({
   SettingsPanel: () => <div>Settings panel</div>,
 }));
 
-describe("DailyLoopApp vault removal", () => {
+describe("AgendaApp vault removal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(invoke).mockImplementation((command) => {
@@ -81,7 +81,7 @@ describe("DailyLoopApp vault removal", () => {
   });
 
   it("clears the active workspace and returns to intake after removing the active vault reference", async () => {
-    render(<DailyLoopApp />);
+    render(<AgendaApp />);
 
     expect(await screen.findByText("Roadmap panel")).toBeInTheDocument();
 

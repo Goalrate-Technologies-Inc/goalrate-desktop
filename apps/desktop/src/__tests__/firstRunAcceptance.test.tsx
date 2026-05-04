@@ -236,17 +236,17 @@ function installAcceptanceInvokeMock(state: AcceptanceState): void {
       case "save_memory":
         state.memoryByVault.set(input.vaultId as string, input.input as AcceptanceMemory);
         return undefined;
-      case "daily_loop_get_plan":
+      case "agenda_get_plan":
         return state.plansByKey.get(planKey(input.vaultId as string, input.date as string)) ?? null;
-      case "daily_loop_get_agenda_warnings":
-      case "daily_loop_get_outcomes":
-      case "daily_loop_get_chat_history":
-      case "daily_loop_get_chat_dates":
-      case "daily_loop_get_recent_stats":
+      case "agenda_get_agenda_warnings":
+      case "agenda_get_outcomes":
+      case "agenda_get_chat_history":
+      case "agenda_get_chat_dates":
+      case "agenda_get_recent_stats":
         return [];
-      case "daily_loop_get_check_in":
+      case "agenda_get_check_in":
         return null;
-      case "daily_loop_get_task_metadata": {
+      case "agenda_get_task_metadata": {
         const goals = state.goalsByVault.get(input.vaultId as string) ?? [];
         return Object.fromEntries(
           goals.flatMap((goal) =>
@@ -263,14 +263,14 @@ function installAcceptanceInvokeMock(state: AcceptanceState): void {
           ),
         );
       }
-      case "daily_loop_create_plan": {
+      case "agenda_create_plan": {
         const vaultId = input.vaultId as string;
         const date = input.date as string;
         const plan = createPlanFromGoals(state, vaultId, date);
         state.plansByKey.set(planKey(vaultId, date), plan);
         return clonePlan(plan);
       }
-      case "daily_loop_update_plan": {
+      case "agenda_update_plan": {
         const update = input.input as {
           vaultId: string;
           planId: string;
@@ -299,7 +299,7 @@ function installAcceptanceInvokeMock(state: AcceptanceState): void {
         state.plansByKey.set(key, updated);
         return clonePlan(updated);
       }
-      case "daily_loop_toggle_task_completion": {
+      case "agenda_toggle_task_completion": {
         const key = [...state.plansByKey.entries()].find(
           ([, plan]) => plan.id === input.planId,
         )?.[0];
@@ -315,7 +315,7 @@ function installAcceptanceInvokeMock(state: AcceptanceState): void {
         state.plansByKey.set(key, updated);
         return clonePlan(updated);
       }
-      case "daily_loop_defer_task": {
+      case "agenda_defer_task": {
         const deferInput = input.input as { vaultId: string; taskId: string; date: string };
         const key = planKey(deferInput.vaultId, deferInput.date);
         const plan = state.plansByKey.get(key);

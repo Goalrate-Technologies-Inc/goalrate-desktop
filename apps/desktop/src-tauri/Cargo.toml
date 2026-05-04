@@ -29,7 +29,7 @@ vault-core = { path = "../../../crates/vault-core" }
 markdown-parser = { path = "../../../crates/markdown-parser" }
 sqlite-index = { path = "../../../crates/sqlite-index" }
 focus-engine = { path = "../../../crates/focus-engine" }
-daily-loop = { path = "../../../crates/daily-loop" }
+agenda = { path = "../../../crates/agenda" }
 goalrate-crypto = { path = "../../../crates/crypto" }
 
 # Workspace dependencies

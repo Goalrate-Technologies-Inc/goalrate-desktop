@@ -1,19 +1,19 @@
 import { useState } from "react";
 import { Loader2, Plus } from "lucide-react";
-import type { UseDailyLoopReturn } from "../../hooks/useDailyLoop";
+import type { UseAgendaReturn } from "../../hooks/useAgenda";
 import { useVault } from "../../context/VaultContext";
-import * as dailyLoopIpc from "../../lib/dailyLoopIpc";
-import { DEFAULT_AI_MODEL } from "../../lib/dailyLoopIpc";
+import * as agendaIpc from "../../lib/agendaIpc";
+import { DEFAULT_AI_MODEL } from "../../lib/agendaIpc";
 import { GoalRateIcon } from "../../components/GoalRateIcon";
 import { useSubscription } from "../../context/SubscriptionContext";
 import { PlusUpgradePanel } from "./SubscriptionPanel";
 
 interface PlanGenerateButtonProps {
-  dailyLoop: UseDailyLoopReturn;
+  agenda: UseAgendaReturn;
 }
 
 export function PlanGenerateButton({
-  dailyLoop,
+  agenda,
 }: PlanGenerateButtonProps): React.ReactElement {
   const { currentVault } = useVault();
   const { allowsAi, isLoading: isLoadingSubscription } = useSubscription();
@@ -30,7 +30,7 @@ export function PlanGenerateButton({
     setIsGenerating(true);
     setGenError(null);
     try {
-      await dailyLoop.createPlan();
+      await agenda.createPlan();
     } catch (err) {
       const e = err as Record<string, unknown>;
       setGenError(
@@ -62,15 +62,15 @@ export function PlanGenerateButton({
     setIsGenerating(true);
     setGenError(null);
     try {
-      const result = await dailyLoopIpc.generatePlan(
+      const result = await agendaIpc.generatePlan(
         vaultId,
         DEFAULT_AI_MODEL,
-        dailyLoop.date,
+        agenda.date,
       );
       if (result.taskTitles) {
-        dailyLoop.mergeTaskTitles(result.taskTitles);
+        agenda.mergeTaskTitles(result.taskTitles);
       }
-      await dailyLoop.refresh();
+      await agenda.refresh();
     } catch (err) {
       const e = err as Record<string, unknown>;
       setGenError(

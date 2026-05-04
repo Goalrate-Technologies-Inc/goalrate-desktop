@@ -1,6 +1,6 @@
 /**
  * Types for the Agenda and Assistant feature.
- * Mirrors Rust structs in crates/daily-loop/src/models.rs.
+ * Mirrors Rust structs in crates/agenda/src/models.rs.
  */
 
 // ── Core Entities ──────────────────────────────────────────────
@@ -217,42 +217,42 @@ export interface SendChatInput {
 
 // ── IPC Command Names ──────────────────────────────────────────
 
-export const DAILY_LOOP_IPC_COMMANDS = {
-  GET_PLAN: "daily_loop_get_plan",
-  GET_AGENDA_WARNINGS: "daily_loop_get_agenda_warnings",
-  OPEN_AGENDA_ERROR_LOG: "daily_loop_open_agenda_error_log",
-  CREATE_PLAN: "daily_loop_create_plan",
-  UPDATE_PLAN: "daily_loop_update_plan",
-  SCHEDULE_TASK_FOR_DATE: "daily_loop_schedule_task_for_date",
-  GENERATE_ALTERNATIVE_SUBTASK: "daily_loop_generate_alternative_subtask",
+export const AGENDA_IPC_COMMANDS = {
+  GET_PLAN: "agenda_get_plan",
+  GET_AGENDA_WARNINGS: "agenda_get_agenda_warnings",
+  OPEN_AGENDA_ERROR_LOG: "agenda_open_agenda_error_log",
+  CREATE_PLAN: "agenda_create_plan",
+  UPDATE_PLAN: "agenda_update_plan",
+  SCHEDULE_TASK_FOR_DATE: "agenda_schedule_task_for_date",
+  GENERATE_ALTERNATIVE_SUBTASK: "agenda_generate_alternative_subtask",
   SCHEDULE_PARENT_TASK_FOR_MISSED_SUBTASK:
-    "daily_loop_schedule_parent_task_for_missed_subtask",
-  GENERATE_ALTERNATIVE_TASK: "daily_loop_generate_alternative_task",
+    "agenda_schedule_parent_task_for_missed_subtask",
+  GENERATE_ALTERNATIVE_TASK: "agenda_generate_alternative_task",
   ARCHIVE_PARENT_TASK_FOR_MISSED_SUBTASK:
-    "daily_loop_archive_parent_task_for_missed_subtask",
+    "agenda_archive_parent_task_for_missed_subtask",
   ARCHIVE_GOAL_FOR_MISSED_SUBTASK:
-    "daily_loop_archive_goal_for_missed_subtask",
-  LOCK_PLAN: "daily_loop_lock_plan",
-  CREATE_OUTCOME: "daily_loop_create_outcome",
-  GET_OUTCOMES: "daily_loop_get_outcomes",
-  UPDATE_OUTCOME: "daily_loop_update_outcome",
-  DELETE_OUTCOME: "daily_loop_delete_outcome",
-  DEFER_TASK: "daily_loop_defer_task",
-  TOGGLE_TASK_COMPLETION: "daily_loop_toggle_task_completion",
-  GET_DEFERRAL_COUNT: "daily_loop_get_deferral_count",
-  GET_DEFERRALS: "daily_loop_get_deferrals",
-  CREATE_CHECK_IN: "daily_loop_create_check_in",
-  GET_CHECK_IN: "daily_loop_get_check_in",
-  SEND_CHAT: "daily_loop_send_chat",
-  GET_CHAT_HISTORY: "daily_loop_get_chat_history",
-  GET_CHAT_DATES: "daily_loop_get_chat_dates",
-  GET_RECENT_STATS: "daily_loop_get_recent_stats",
-  COUNT_CHECK_INS: "daily_loop_count_check_ins",
-  GET_REVISIONS: "daily_loop_get_revisions",
+    "agenda_archive_goal_for_missed_subtask",
+  LOCK_PLAN: "agenda_lock_plan",
+  CREATE_OUTCOME: "agenda_create_outcome",
+  GET_OUTCOMES: "agenda_get_outcomes",
+  UPDATE_OUTCOME: "agenda_update_outcome",
+  DELETE_OUTCOME: "agenda_delete_outcome",
+  DEFER_TASK: "agenda_defer_task",
+  TOGGLE_TASK_COMPLETION: "agenda_toggle_task_completion",
+  GET_DEFERRAL_COUNT: "agenda_get_deferral_count",
+  GET_DEFERRALS: "agenda_get_deferrals",
+  CREATE_CHECK_IN: "agenda_create_check_in",
+  GET_CHECK_IN: "agenda_get_check_in",
+  SEND_CHAT: "agenda_send_chat",
+  GET_CHAT_HISTORY: "agenda_get_chat_history",
+  GET_CHAT_DATES: "agenda_get_chat_dates",
+  GET_RECENT_STATS: "agenda_get_recent_stats",
+  COUNT_CHECK_INS: "agenda_count_check_ins",
+  GET_REVISIONS: "agenda_get_revisions",
 } as const;
 
-export type DailyLoopIpcCommandName =
-  (typeof DAILY_LOOP_IPC_COMMANDS)[keyof typeof DAILY_LOOP_IPC_COMMANDS];
+export type AgendaIpcCommandName =
+  (typeof AGENDA_IPC_COMMANDS)[keyof typeof AGENDA_IPC_COMMANDS];
 
 // ── AI Response Types ──────────────────────────────────────────
 
@@ -280,8 +280,8 @@ export interface ChatReprioritizeResponse {
   taskTitles: Record<string, string>;
 }
 
-export const DAILY_LOOP_AI_COMMANDS = {
-  GENERATE_PLAN: "daily_loop_generate_plan",
-  CHAT_REPRIORITIZE: "daily_loop_chat_reprioritize",
-  GENERATE_SUMMARY: "daily_loop_generate_summary",
+export const AGENDA_AI_COMMANDS = {
+  GENERATE_PLAN: "agenda_generate_plan",
+  CHAT_REPRIORITIZE: "agenda_chat_reprioritize",
+  GENERATE_SUMMARY: "agenda_generate_summary",
 } as const;

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Send, Clock, ArrowLeft, Loader2 } from "lucide-react";
 import type { ChatMessage } from "@goalrate-app/shared";
-import type { UseDailyLoopReturn } from "../../hooks/useDailyLoop";
+import type { UseAgendaReturn } from "../../hooks/useAgenda";
 import { ChatMessageBubble } from "./ChatMessageBubble";
 import { useVault } from "../../context/VaultContext";
-import * as dailyLoopIpc from "../../lib/dailyLoopIpc";
+import * as agendaIpc from "../../lib/agendaIpc";
 import { AssistantMissedWork } from "./AssistantMissedWork";
 import { useSubscription } from "../../context/SubscriptionContext";
 import { PlusUpgradePanel } from "./SubscriptionPanel";
@@ -12,7 +12,7 @@ import { PlusUpgradePanel } from "./SubscriptionPanel";
 type HistoryMode = "active" | "dateList" | "viewing";
 
 interface AiChatPanelProps {
-  dailyLoop: UseDailyLoopReturn;
+  agenda: UseAgendaReturn;
 }
 
 function assistantActivityLabel(message: string): string {
@@ -105,9 +105,9 @@ function AssistantWorkingIndicator({
 }
 
 export function AiChatPanel({
-  dailyLoop,
+  agenda,
 }: AiChatPanelProps): React.ReactElement {
-  const { chatHistory, plan, date: todayDate } = dailyLoop;
+  const { chatHistory, plan, date: todayDate } = agenda;
   const { currentVault } = useVault();
   const { allowsAi } = useSubscription();
   const vaultId = currentVault?.id ?? "";
@@ -144,13 +144,13 @@ export function AiChatPanel({
     setIsSending(true);
 
     try {
-      await dailyLoop.sendChat(text);
+      await agenda.sendChat(text);
     } catch {
       // Error is handled in the hook
     } finally {
       setIsSending(false);
     }
-  }, [input, plan, isSending, allowsAi, dailyLoop]);
+  }, [input, plan, isSending, allowsAi, agenda]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -169,7 +169,7 @@ export function AiChatPanel({
     setHistoryMode("dateList");
     setIsLoadingHistory(true);
     try {
-      const dates = await dailyLoopIpc.getChatDates(vaultId);
+      const dates = await agendaIpc.getChatDates(vaultId);
       // Exclude today's date — user can see today's chat in active mode
       setChatDates(dates.filter((d) => d !== todayDate));
     } catch {
@@ -186,9 +186,9 @@ export function AiChatPanel({
       }
       setIsLoadingHistory(true);
       try {
-        const pastPlan = await dailyLoopIpc.getPlan(vaultId, date);
+        const pastPlan = await agendaIpc.getPlan(vaultId, date);
         if (pastPlan) {
-          const messages = await dailyLoopIpc.getChatHistory(
+          const messages = await agendaIpc.getChatHistory(
             vaultId,
             pastPlan.id,
           );
@@ -262,7 +262,7 @@ export function AiChatPanel({
         <>
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
             {allowsAi ? (
-              <AssistantMissedWork dailyLoop={dailyLoop} />
+              <AssistantMissedWork agenda={agenda} />
             ) : (
               <PlusUpgradePanel compact />
             )}

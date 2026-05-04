@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  pathsAffectDailyLoop,
+  pathsAffectAgenda,
   pathsAffectRecoveryIssues,
   pathsAffectRecoverySnapshots,
   pathsAffectRoadmap,
@@ -22,24 +22,24 @@ describe("vaultWatcherEvents", () => {
   });
 
   it("keeps missing or empty paths as broad refreshes", () => {
-    expect(pathsAffectDailyLoop(null, "2026-04-26")).toBe(true);
+    expect(pathsAffectAgenda(null, "2026-04-26")).toBe(true);
     expect(pathsAffectRoadmap([])).toBe(true);
     expect(pathsAffectRecoveryIssues(null)).toBe(true);
     expect(pathsAffectRecoverySnapshots([])).toBe(true);
   });
 
   it("filters Agenda refresh paths", () => {
-    expect(pathsAffectDailyLoop(["agenda/2026-04-26.md"], "2026-04-26")).toBe(
+    expect(pathsAffectAgenda(["agenda/2026-04-26.md"], "2026-04-26")).toBe(
       true,
     );
-    expect(pathsAffectDailyLoop(["agenda/2026-04-25.md"], "2026-04-26")).toBe(
+    expect(pathsAffectAgenda(["agenda/2026-04-25.md"], "2026-04-26")).toBe(
       false,
     );
-    expect(pathsAffectDailyLoop(["goals/launch.md"], "2026-04-26")).toBe(true);
-    expect(pathsAffectDailyLoop([".goalrate/daily-loop.db"], "2026-04-26")).toBe(
+    expect(pathsAffectAgenda(["goals/launch.md"], "2026-04-26")).toBe(true);
+    expect(pathsAffectAgenda([".goalrate/agenda.db"], "2026-04-26")).toBe(
       false,
     );
-    expect(pathsAffectDailyLoop(["logs/errors.md"], "2026-04-26")).toBe(false);
+    expect(pathsAffectAgenda(["logs/errors.md"], "2026-04-26")).toBe(false);
   });
 
   it("filters Roadmap refresh paths", () => {

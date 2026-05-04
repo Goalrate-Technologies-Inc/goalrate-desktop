@@ -1,21 +1,21 @@
 import { useCallback, useState } from "react";
 import { Check, X, CalendarCheck, ArrowRight, Loader2 } from "lucide-react";
-import type { UseDailyLoopReturn } from "../../hooks/useDailyLoop";
+import type { UseAgendaReturn } from "../../hooks/useAgenda";
 
 interface CheckInDialogProps {
-  dailyLoop: UseDailyLoopReturn;
+  agenda: UseAgendaReturn;
   completedTasks: Set<string>;
   open: boolean;
   onClose: () => void;
 }
 
 export function CheckInDialog({
-  dailyLoop,
+  agenda,
   completedTasks,
   open,
   onClose,
 }: CheckInDialogProps): React.ReactElement | null {
-  const { plan, taskTitles } = dailyLoop;
+  const { plan, taskTitles } = agenda;
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -28,11 +28,11 @@ export function CheckInDialog({
     try {
       // Defer remaining tasks to tomorrow
       for (const taskId of remainingTasks) {
-        await dailyLoop.deferTask(taskId);
+        await agenda.deferTask(taskId);
       }
 
       // Create check-in with completed task IDs
-      await dailyLoop.createCheckIn(doneTasks, notes || undefined);
+      await agenda.createCheckIn(doneTasks, notes || undefined);
 
       setNotes("");
       onClose();
@@ -41,7 +41,7 @@ export function CheckInDialog({
     } finally {
       setIsSubmitting(false);
     }
-  }, [remainingTasks, doneTasks, notes, dailyLoop, onClose]);
+  }, [remainingTasks, doneTasks, notes, agenda, onClose]);
 
   if (!open) {
     return null;

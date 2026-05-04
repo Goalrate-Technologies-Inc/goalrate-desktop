@@ -1,4 +1,4 @@
-//! Data models for the daily loop feature
+//! Data models for the agenda feature
 
 use std::collections::HashMap;
 

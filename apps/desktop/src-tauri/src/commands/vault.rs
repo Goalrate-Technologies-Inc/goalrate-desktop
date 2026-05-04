@@ -544,7 +544,7 @@ fn relocate_vault(
         let mut vaults = state.vaults.lock().unwrap();
         vaults.insert(vault_id.to_string(), manager);
     }
-    crate::commands::daily_loop::release_daily_loop_state(vault_id, state.inner())?;
+    crate::commands::agenda::release_agenda_state(vault_id, state.inner())?;
     start_library_watcher(vault_id, &updated_path, &app, state.inner())?;
 
     Ok(VaultConfig::from(
@@ -701,7 +701,7 @@ pub async fn close_vault(vault_id: String, state: State<'_, AppState>) -> Result
     }
 
     stop_library_watcher(&vault_id, state.inner());
-    crate::commands::daily_loop::release_daily_loop_state(&vault_id, state.inner())?;
+    crate::commands::agenda::release_agenda_state(&vault_id, state.inner())?;
 
     Ok(())
 }
@@ -716,7 +716,7 @@ pub async fn delete_vault(vault_id: String, state: State<'_, AppState>) -> Resul
     vaults.remove(&vault_id);
     drop(vaults);
     stop_library_watcher(&vault_id, state.inner());
-    crate::commands::daily_loop::release_daily_loop_state(&vault_id, state.inner())?;
+    crate::commands::agenda::release_agenda_state(&vault_id, state.inner())?;
 
     // Remove from registry
     remove_registry_entry(&vault_id)?;
@@ -1130,7 +1130,7 @@ mod tests {
     fn library_update_ignores_internal_cache_paths() {
         let root = PathBuf::from("/tmp/goalrate-vault");
         let event = make_event(vec![
-            root.join(".goalrate/daily-loop.db-wal"),
+            root.join(".goalrate/agenda.db-wal"),
             root.join(".goalrate/index.db"),
         ]);
 

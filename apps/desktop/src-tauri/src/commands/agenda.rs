@@ -3,6 +3,7 @@
 //! CRUD operations for the Assistant-backed daily Agenda.
 
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -11,8 +12,8 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use daily_loop::{
-    ChatMessage, ChatRole, CheckIn, DailyLoopDb, DailyPlan, DailyStats, Deferral, Outcome,
+use agenda::{
+    AgendaDb, ChatMessage, ChatRole, CheckIn, DailyPlan, DailyStats, Deferral, Outcome,
     PlanRevision, ScheduledTask,
 };
 
@@ -51,6 +52,8 @@ struct MemoryPlanningContext {
 }
 
 const MEMORY_SCHEDULE_ESTIMATE_SOURCE: &str = "memory";
+const AGENDA_DB_FILE_NAME: &str = "agenda.db";
+const LEGACY_AGENDA_DB_FILE_NAME: &str = "daily-loop.db";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct MemoryAgendaTargets {
@@ -73,8 +76,8 @@ impl MemoryPlanningContext {
     }
 }
 
-/// Global map of vault_id -> DailyLoopDb instances
-pub(crate) static DAILY_LOOP_DBS: Lazy<Mutex<HashMap<String, DailyLoopDb>>> =
+/// Global map of vault_id -> AgendaDb instances
+pub(crate) static AGENDA_DBS: Lazy<Mutex<HashMap<String, AgendaDb>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 static AGENDA_LOAD_WARNINGS: Lazy<Mutex<HashMap<String, Vec<String>>>> =
@@ -84,16 +87,13 @@ fn agenda_warning_key(vault_id: &str, date: NaiveDate) -> String {
     format!("{vault_id}:{}", date)
 }
 
-pub(crate) fn release_daily_loop_state(
-    vault_id: &str,
-    app_state: &AppState,
-) -> Result<(), AppError> {
-    DAILY_LOOP_DBS
+pub(crate) fn release_agenda_state(vault_id: &str, app_state: &AppState) -> Result<(), AppError> {
+    AGENDA_DBS
         .lock()
         .map_err(|e| {
             AppError::new(
                 ErrorCode::UnknownError,
-                format!("Failed to lock daily loop DBs: {e}"),
+                format!("Failed to lock agenda DBs: {e}"),
             )
         })?
         .remove(vault_id);
@@ -189,17 +189,37 @@ fn agenda_error_log_path_for_vault(
     Ok(vault.structure().error_log.clone())
 }
 
-/// Ensure a DailyLoopDb is open for a vault, creating it if needed.
-/// Acquires locks in a safe order: check DAILY_LOOP_DBS first (drop it),
+fn migrate_legacy_agenda_db(goalrate_dir: &Path) -> Result<(), AppError> {
+    for suffix in ["", "-wal", "-shm"] {
+        let legacy_path = goalrate_dir.join(format!("{LEGACY_AGENDA_DB_FILE_NAME}{suffix}"));
+        let agenda_path = goalrate_dir.join(format!("{AGENDA_DB_FILE_NAME}{suffix}"));
+        if legacy_path.exists() && !agenda_path.exists() {
+            fs::rename(&legacy_path, &agenda_path).map_err(|e| {
+                AppError::new(
+                    ErrorCode::UnknownError,
+                    format!(
+                        "Failed to migrate legacy Agenda database {} to {}: {e}",
+                        legacy_path.display(),
+                        agenda_path.display()
+                    ),
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+/// Ensure an AgendaDb is open for a vault, creating it if needed.
+/// Acquires locks in a safe order: check AGENDA_DBS first (drop it),
 /// then acquire vaults lock to get the path (drop it), create DB,
-/// then re-acquire DAILY_LOOP_DBS to insert.
+/// then re-acquire AGENDA_DBS to insert.
 fn ensure_db(vault_id: &str, app_state: &AppState) -> Result<(), AppError> {
     // Check if DB already exists — acquire and immediately drop the lock
     {
-        let dbs = DAILY_LOOP_DBS.lock().map_err(|e| {
+        let dbs = AGENDA_DBS.lock().map_err(|e| {
             AppError::new(
                 ErrorCode::UnknownError,
-                format!("Failed to lock daily loop DBs: {e}"),
+                format!("Failed to lock agenda DBs: {e}"),
             )
         })?;
         if dbs.contains_key(vault_id) {
@@ -208,7 +228,7 @@ fn ensure_db(vault_id: &str, app_state: &AppState) -> Result<(), AppError> {
     } // Lock dropped here
 
     // Get vault path — separate lock scope to avoid nesting
-    let db_path = {
+    let goalrate_dir = {
         let vaults = app_state.vaults.lock().map_err(|e| {
             AppError::new(
                 ErrorCode::UnknownError,
@@ -218,22 +238,24 @@ fn ensure_db(vault_id: &str, app_state: &AppState) -> Result<(), AppError> {
         let vault = vaults
             .get(vault_id)
             .ok_or_else(|| AppError::vault_not_open(vault_id))?;
-        vault.structure().goalrate_dir.join("daily-loop.db")
+        vault.structure().goalrate_dir.clone()
     }; // Vaults lock dropped here
+    migrate_legacy_agenda_db(&goalrate_dir)?;
+    let db_path = goalrate_dir.join(AGENDA_DB_FILE_NAME);
 
     // Open DB without any locks held
-    let db = DailyLoopDb::open(&db_path).map_err(|e| {
+    let db = AgendaDb::open(&db_path).map_err(|e| {
         AppError::new(
             ErrorCode::UnknownError,
-            format!("Failed to open daily loop DB: {e}"),
+            format!("Failed to open agenda DB: {e}"),
         )
     })?;
 
     // Re-acquire to insert (another thread may have inserted in the meantime — that's fine)
-    let mut dbs = DAILY_LOOP_DBS.lock().map_err(|e| {
+    let mut dbs = AGENDA_DBS.lock().map_err(|e| {
         AppError::new(
             ErrorCode::UnknownError,
-            format!("Failed to lock daily loop DBs: {e}"),
+            format!("Failed to lock agenda DBs: {e}"),
         )
     })?;
     dbs.entry(vault_id.to_string()).or_insert(db);
@@ -243,31 +265,31 @@ fn ensure_db(vault_id: &str, app_state: &AppState) -> Result<(), AppError> {
 pub(crate) fn with_db<T>(
     vault_id: &str,
     app_state: &AppState,
-    f: impl FnOnce(&DailyLoopDb) -> Result<T, daily_loop::DailyLoopError>,
+    f: impl FnOnce(&AgendaDb) -> Result<T, agenda::AgendaError>,
 ) -> Result<T, AppError> {
     ensure_db(vault_id, app_state)?;
 
-    let dbs = DAILY_LOOP_DBS.lock().map_err(|e| {
+    let dbs = AGENDA_DBS.lock().map_err(|e| {
         AppError::new(
             ErrorCode::UnknownError,
-            format!("Failed to lock daily loop DBs: {e}"),
+            format!("Failed to lock agenda DBs: {e}"),
         )
     })?;
 
     let db = dbs.get(vault_id).ok_or_else(|| {
         AppError::new(
             ErrorCode::UnknownError,
-            "Daily loop DB disappeared unexpectedly",
+            "Agenda DB disappeared unexpectedly",
         )
     })?;
 
     f(db).map_err(|e| match e {
-        daily_loop::DailyLoopError::NotFound(msg) => AppError::item_not_found("DailyLoop", &msg),
-        daily_loop::DailyLoopError::PlanAlreadyExists(date) => AppError::new(
+        agenda::AgendaError::NotFound(msg) => AppError::item_not_found("Agenda", &msg),
+        agenda::AgendaError::PlanAlreadyExists(date) => AppError::new(
             ErrorCode::ItemAlreadyExists,
             format!("Plan already exists for {date}"),
         ),
-        daily_loop::DailyLoopError::PlanLocked => AppError::new(
+        agenda::AgendaError::PlanLocked => AppError::new(
             ErrorCode::VaultLocked,
             "Plan is locked and cannot be modified",
         ),
@@ -2519,7 +2541,7 @@ pub(crate) fn write_agenda_markdown_for_plan(
 // ── Plan Commands ──────────────────────────────────────────────
 
 #[tauri::command]
-pub fn daily_loop_get_plan(
+pub fn agenda_get_plan(
     vault_id: String,
     date: String,
     app_state: State<'_, AppState>,
@@ -2547,16 +2569,13 @@ pub fn daily_loop_get_plan(
 }
 
 #[tauri::command]
-pub fn daily_loop_get_agenda_warnings(
-    vault_id: String,
-    date: String,
-) -> Result<Vec<String>, AppError> {
+pub fn agenda_get_agenda_warnings(vault_id: String, date: String) -> Result<Vec<String>, AppError> {
     let date = parse_date(&date)?;
     agenda_warnings_for_date(&vault_id, date)
 }
 
 #[tauri::command]
-pub fn daily_loop_open_agenda_error_log(
+pub fn agenda_open_agenda_error_log(
     vault_id: String,
     app_state: State<'_, AppState>,
 ) -> Result<(), AppError> {
@@ -2571,7 +2590,7 @@ pub fn daily_loop_open_agenda_error_log(
 }
 
 #[tauri::command]
-pub fn daily_loop_create_plan(
+pub fn agenda_create_plan(
     vault_id: String,
     date: String,
     app_state: State<'_, AppState>,
@@ -4030,7 +4049,7 @@ fn update_plan_from_input(
 }
 
 #[tauri::command]
-pub fn daily_loop_update_plan(
+pub fn agenda_update_plan(
     input: UpdatePlanInput,
     app_state: State<'_, AppState>,
 ) -> Result<DailyPlan, AppError> {
@@ -4038,7 +4057,7 @@ pub fn daily_loop_update_plan(
 }
 
 #[tauri::command]
-pub fn daily_loop_schedule_task_for_date(
+pub fn agenda_schedule_task_for_date(
     input: ScheduleTaskForDateInput,
     app_state: State<'_, AppState>,
 ) -> Result<DailyPlan, AppError> {
@@ -4046,7 +4065,7 @@ pub fn daily_loop_schedule_task_for_date(
 }
 
 #[tauri::command]
-pub fn daily_loop_generate_alternative_subtask(
+pub fn agenda_generate_alternative_subtask(
     input: GenerateAlternativeSubtaskInput,
     app_state: State<'_, AppState>,
 ) -> Result<GenerateAlternativeSubtaskResult, AppError> {
@@ -4054,7 +4073,7 @@ pub fn daily_loop_generate_alternative_subtask(
 }
 
 #[tauri::command]
-pub fn daily_loop_schedule_parent_task_for_missed_subtask(
+pub fn agenda_schedule_parent_task_for_missed_subtask(
     input: ScheduleParentTaskForMissedSubtaskInput,
     app_state: State<'_, AppState>,
 ) -> Result<DailyPlan, AppError> {
@@ -4062,7 +4081,7 @@ pub fn daily_loop_schedule_parent_task_for_missed_subtask(
 }
 
 #[tauri::command]
-pub fn daily_loop_generate_alternative_task(
+pub fn agenda_generate_alternative_task(
     input: GenerateAlternativeTaskInput,
     app_state: State<'_, AppState>,
 ) -> Result<GenerateAlternativeTaskResult, AppError> {
@@ -4070,7 +4089,7 @@ pub fn daily_loop_generate_alternative_task(
 }
 
 #[tauri::command]
-pub fn daily_loop_archive_parent_task_for_missed_subtask(
+pub fn agenda_archive_parent_task_for_missed_subtask(
     input: ArchiveParentTaskForMissedSubtaskInput,
     app_state: State<'_, AppState>,
 ) -> Result<ArchiveParentTaskForMissedSubtaskResult, AppError> {
@@ -4078,7 +4097,7 @@ pub fn daily_loop_archive_parent_task_for_missed_subtask(
 }
 
 #[tauri::command]
-pub fn daily_loop_archive_goal_for_missed_subtask(
+pub fn agenda_archive_goal_for_missed_subtask(
     input: ArchiveGoalForMissedSubtaskInput,
     app_state: State<'_, AppState>,
 ) -> Result<ArchiveGoalForMissedSubtaskResult, AppError> {
@@ -4086,7 +4105,7 @@ pub fn daily_loop_archive_goal_for_missed_subtask(
 }
 
 #[tauri::command]
-pub fn daily_loop_lock_plan(
+pub fn agenda_lock_plan(
     vault_id: String,
     plan_id: String,
     app_state: State<'_, AppState>,
@@ -4109,7 +4128,7 @@ pub struct CreateOutcomeInput {
 }
 
 #[tauri::command]
-pub fn daily_loop_create_outcome(
+pub fn agenda_create_outcome(
     input: CreateOutcomeInput,
     app_state: State<'_, AppState>,
 ) -> Result<Outcome, AppError> {
@@ -4130,7 +4149,7 @@ pub fn daily_loop_create_outcome(
 }
 
 #[tauri::command]
-pub fn daily_loop_get_outcomes(
+pub fn agenda_get_outcomes(
     vault_id: String,
     daily_plan_id: String,
     app_state: State<'_, AppState>,
@@ -4150,7 +4169,7 @@ pub struct UpdateOutcomeInput {
 }
 
 #[tauri::command]
-pub fn daily_loop_update_outcome(
+pub fn agenda_update_outcome(
     input: UpdateOutcomeInput,
     app_state: State<'_, AppState>,
 ) -> Result<Outcome, AppError> {
@@ -4170,7 +4189,7 @@ pub fn daily_loop_update_outcome(
 }
 
 #[tauri::command]
-pub fn daily_loop_delete_outcome(
+pub fn agenda_delete_outcome(
     vault_id: String,
     outcome_id: String,
     app_state: State<'_, AppState>,
@@ -4199,7 +4218,7 @@ pub struct DeferTaskInput {
 }
 
 #[tauri::command]
-pub fn daily_loop_defer_task(
+pub fn agenda_defer_task(
     input: DeferTaskInput,
     app_state: State<'_, AppState>,
 ) -> Result<Deferral, AppError> {
@@ -4254,7 +4273,7 @@ fn defer_task_from_input(
 }
 
 #[tauri::command]
-pub fn daily_loop_toggle_task_completion(
+pub fn agenda_toggle_task_completion(
     vault_id: String,
     plan_id: String,
     task_id: String,
@@ -4366,7 +4385,7 @@ fn toggle_task_completion_in_state(
 /// Returns metadata for all tasks across goals in a vault.
 /// Keyed by task_id. Used by the frontend for prioritization and parent Goal navigation.
 #[tauri::command]
-pub fn daily_loop_get_task_metadata(
+pub fn agenda_get_task_metadata(
     vault_id: String,
     date: Option<String>,
     app_state: State<'_, AppState>,
@@ -4447,7 +4466,7 @@ pub fn daily_loop_get_task_metadata(
 }
 
 #[tauri::command]
-pub fn daily_loop_get_deferral_count(
+pub fn agenda_get_deferral_count(
     vault_id: String,
     task_id: String,
     app_state: State<'_, AppState>,
@@ -4456,7 +4475,7 @@ pub fn daily_loop_get_deferral_count(
 }
 
 #[tauri::command]
-pub fn daily_loop_get_deferrals(
+pub fn agenda_get_deferrals(
     vault_id: String,
     task_id: String,
     app_state: State<'_, AppState>,
@@ -4479,7 +4498,7 @@ pub struct CreateCheckInInput {
 }
 
 #[tauri::command]
-pub fn daily_loop_create_check_in(
+pub fn agenda_create_check_in(
     input: CreateCheckInInput,
     app_state: State<'_, AppState>,
 ) -> Result<CheckIn, AppError> {
@@ -4509,7 +4528,7 @@ pub fn daily_loop_create_check_in(
 }
 
 #[tauri::command]
-pub fn daily_loop_get_check_in(
+pub fn agenda_get_check_in(
     vault_id: String,
     date: String,
     app_state: State<'_, AppState>,
@@ -4529,7 +4548,7 @@ pub struct SendChatInput {
 }
 
 #[tauri::command]
-pub fn daily_loop_send_chat(
+pub fn agenda_send_chat(
     input: SendChatInput,
     app_state: State<'_, AppState>,
 ) -> Result<ChatMessage, AppError> {
@@ -4539,7 +4558,7 @@ pub fn daily_loop_send_chat(
 }
 
 #[tauri::command]
-pub fn daily_loop_get_chat_history(
+pub fn agenda_get_chat_history(
     vault_id: String,
     daily_plan_id: String,
     app_state: State<'_, AppState>,
@@ -4550,7 +4569,7 @@ pub fn daily_loop_get_chat_history(
 }
 
 #[tauri::command]
-pub fn daily_loop_get_chat_dates(
+pub fn agenda_get_chat_dates(
     vault_id: String,
     limit: Option<i32>,
     app_state: State<'_, AppState>,
@@ -4562,7 +4581,7 @@ pub fn daily_loop_get_chat_dates(
 // ── Stats Commands ─────────────────────────────────────────────
 
 #[tauri::command]
-pub fn daily_loop_get_recent_stats(
+pub fn agenda_get_recent_stats(
     vault_id: String,
     days: Option<i32>,
     app_state: State<'_, AppState>,
@@ -4572,7 +4591,7 @@ pub fn daily_loop_get_recent_stats(
 }
 
 #[tauri::command]
-pub fn daily_loop_count_check_ins(
+pub fn agenda_count_check_ins(
     vault_id: String,
     app_state: State<'_, AppState>,
 ) -> Result<i32, AppError> {
@@ -4582,7 +4601,7 @@ pub fn daily_loop_count_check_ins(
 // ── Revision Commands ──────────────────────────────────────────
 
 #[tauri::command]
-pub fn daily_loop_get_revisions(
+pub fn agenda_get_revisions(
     vault_id: String,
     daily_plan_id: String,
     app_state: State<'_, AppState>,
@@ -4611,14 +4630,14 @@ mod tests {
     }
 
     #[test]
-    fn release_daily_loop_state_drops_runtime_cache_for_vault() {
+    fn release_agenda_state_drops_runtime_cache_for_vault() {
         let temp = tempfile::tempdir().unwrap();
         let vault_id = format!("vault_{}", uuid::Uuid::new_v4().simple());
-        let db = DailyLoopDb::open(temp.path().join("daily-loop.db")).unwrap();
+        let db = AgendaDb::open(temp.path().join("agenda.db")).unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 4, 27).unwrap();
         let app_state = crate::commands::vault::AppState::default();
 
-        DAILY_LOOP_DBS.lock().unwrap().insert(vault_id.clone(), db);
+        AGENDA_DBS.lock().unwrap().insert(vault_id.clone(), db);
         replace_agenda_warnings(&vault_id, date, vec!["warning".to_string()]).unwrap();
         app_state
             .ai_cache
@@ -4626,9 +4645,9 @@ mod tests {
             .unwrap()
             .put(123, "cached AI response".to_string());
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
 
-        assert!(!DAILY_LOOP_DBS.lock().unwrap().contains_key(&vault_id));
+        assert!(!AGENDA_DBS.lock().unwrap().contains_key(&vault_id));
         assert!(agenda_warnings_for_date(&vault_id, date)
             .unwrap()
             .is_empty());
@@ -4728,7 +4747,7 @@ mod tests {
         assert!(context.contains("Preferences: morning deep work"));
         assert!(!context.contains("Private notes stay local."));
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -4808,7 +4827,7 @@ mod tests {
         assert_eq!(context.blocked_windows[0].label, "Lunch");
         assert!(!context.remote_allowed);
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     fn memory_window_value(
@@ -4916,7 +4935,7 @@ mod tests {
         assert_eq!(scheduled[0].start_time, "9:00 AM");
         assert_eq!(scheduled[1].start_time, "9:30 AM");
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -4956,7 +4975,7 @@ mod tests {
             120
         );
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -4983,7 +5002,7 @@ mod tests {
             .iter()
             .any(|line| line == "Downtime needed: 20 hours"));
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5038,7 +5057,7 @@ mod tests {
             .as_slice()
         );
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5096,7 +5115,7 @@ mod tests {
             Some("1:00 PM")
         );
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5148,7 +5167,7 @@ mod tests {
             vec!["task_one", "task_two", "memory_lunch_1200"]
         );
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5188,7 +5207,7 @@ mod tests {
             ]
         );
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5250,7 +5269,7 @@ mod tests {
         assert!(markdown.contains("task_id: task_two"));
         assert!(!markdown.contains("task_id: task_three"));
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5309,7 +5328,7 @@ mod tests {
         assert!(markdown.contains("task_id: memory_lunch_1200"));
         assert!(markdown.contains("12:00 PM Lunch (60 min)"));
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5358,7 +5377,7 @@ mod tests {
             .iter()
             .any(|task| task.start_time == "7:15 AM" || task.start_time == "12:00 PM"));
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5417,7 +5436,7 @@ mod tests {
             ]
         );
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5464,7 +5483,7 @@ mod tests {
         assert_eq!(written.scheduled_tasks[0].start_time, "9:00 AM");
         assert_eq!(written.scheduled_tasks[1].start_time, "10:00 AM");
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -5603,7 +5622,7 @@ mod tests {
         assert!(error_log.contains("tasks[1].title"));
         assert_eq!(std::fs::read_to_string(goal_path).unwrap(), original);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -5721,7 +5740,7 @@ mod tests {
             Some("do")
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -5831,7 +5850,7 @@ mod tests {
             Some("delegate")
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -5948,7 +5967,7 @@ mod tests {
         assert!(agenda_markdown.contains("generated_by: heuristic"));
         assert!(agenda_markdown.contains("Handle urgent launch issue"));
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6053,7 +6072,7 @@ mod tests {
         .unwrap();
         assert_eq!(day_after.task_order, vec!["task_flexible".to_string()]);
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6156,7 +6175,7 @@ scheduled_tasks:
         assert_eq!(cached.scheduled_tasks[0].title, "Beta from markdown");
         assert_eq!(cached.scheduled_tasks[0].start_time, "9:00 AM");
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6253,7 +6272,7 @@ scheduled_tasks:
         assert!(repaired.contains("completed_task_ids:\n- task_existing"));
         assert!(repaired.contains("- [x] 9:00 AM Existing task (30 min)"));
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6355,7 +6374,7 @@ scheduled_tasks:
         assert!(mutation_log.contains("- Action: repair_goal_completion_from_agenda"));
         drop(vaults);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6454,7 +6473,7 @@ scheduled_tasks:
             original_mutation_log
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6520,7 +6539,7 @@ scheduled_tasks:
             invalid_agenda
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6569,7 +6588,7 @@ id: [unterminated
             invalid_agenda
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6672,7 +6691,7 @@ id: [unterminated
         assert_eq!(cached.scheduled_tasks[0].title, "Beta renamed");
         assert_eq!(cached.scheduled_tasks[0].start_time, "9:00 AM");
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6778,7 +6797,7 @@ id: [unterminated
         let beta_index = content.find("task_id: task_beta").unwrap();
         assert!(alpha_index < beta_index);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6865,7 +6884,7 @@ id: [unterminated
         assert!(content.contains("- [ ] 9:00 AM Alpha manually edited (30 min)"));
         assert!(!content.contains("Beta to defer"));
 
-        release_daily_loop_state(&vault_id, &app_state).unwrap();
+        release_agenda_state(&vault_id, &app_state).unwrap();
     }
 
     #[test]
@@ -6929,7 +6948,7 @@ id: [unterminated
             .agenda_file("2026-04-26");
         assert!(!agenda_path.exists());
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7064,7 +7083,7 @@ id: [unterminated
         assert_eq!(cached.scheduled_tasks[0].task_id, "subtask_outline");
         assert_eq!(cached.scheduled_tasks[0].start_time, "9:00 AM");
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7161,7 +7180,7 @@ id: [unterminated
         assert!(mutation_log.contains("- Actor: user"));
         assert!(mutation_log.contains("- Action: update_goal_frontmatter_task_status"));
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7255,7 +7274,7 @@ id: [unterminated
         assert!(task.get("completed_at").and_then(|v| v.as_str()).is_some());
         drop(vaults);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7333,7 +7352,7 @@ id: [unterminated
         assert!(task.get("completed_at").is_none());
         drop(vaults);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7410,7 +7429,7 @@ id: [unterminated
 
         make_test_file_writable(&goal_path);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7492,7 +7511,7 @@ id: [unterminated
 
         make_test_file_writable(&agenda_path);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7588,7 +7607,7 @@ id: [unterminated
             original_snapshot_count
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7692,7 +7711,7 @@ id: [unterminated
             original_snapshot_count
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7784,7 +7803,7 @@ id: [unterminated
             original_snapshot_count
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -7948,7 +7967,7 @@ id: [unterminated
             vec!["subtask_task_parent_alternative".to_string()]
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -8056,7 +8075,7 @@ id: [unterminated
             original_snapshot_count
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -8183,7 +8202,7 @@ id: [unterminated
         .unwrap();
         assert_eq!(cached.task_order, vec!["task_parent".to_string()]);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -8292,7 +8311,7 @@ id: [unterminated
         );
         drop(vaults);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -8440,7 +8459,7 @@ id: [unterminated
             vec!["task_goal_launch_alternative".to_string()]
         );
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -8604,7 +8623,7 @@ id: [unterminated
         assert!(mutation_log.contains("- Action: assistant_archive_parent_task_for_goal"));
         drop(vaults);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -8725,7 +8744,7 @@ id: [unterminated
         assert!(mutation_log.contains("- Action: assistant_archive_goal_for_missed_subtask"));
         drop(vaults);
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 }

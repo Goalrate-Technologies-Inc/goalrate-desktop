@@ -1,9 +1,9 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
-/* Map daily-loop CSS variables to Tailwind theme tokens so that utility
+/* Map agenda CSS variables to Tailwind theme tokens so that utility
    classes like `text-text-primary`, `bg-surface`, `border-border-light`
-   resolve correctly inside `.daily-loop-theme`. */
+   resolve correctly inside `.agenda-theme`. */
 @theme inline {
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
@@ -203,7 +203,7 @@
   }
 }
 
-/* ── Daily Loop: DESIGN.md Kinetic Editorial Theme ── */
+/* ── Agenda: DESIGN.md Kinetic Editorial Theme ── */
 
 /* Override font-serif and font-mono for DESIGN.md fonts */
 .font-serif {
@@ -214,8 +214,8 @@
   font-family: 'JetBrains Mono', ui-monospace, monospace !important;
 }
 
-/* Daily Loop custom properties — light mode */
-.daily-loop-theme {
+/* Agenda custom properties — light mode */
+.agenda-theme {
   --bg: #F5F1EA;
   --bg-subtle: #EDE8DF;
   --surface: #FFFFFF;
@@ -241,9 +241,9 @@
   --hover-bg: rgba(0, 0, 0, 0.05);
 }
 
-/* Daily Loop custom properties — dark mode */
-html.dark .daily-loop-theme,
-.daily-loop-theme:is(.dark *) {
+/* Agenda custom properties — dark mode */
+html.dark .agenda-theme,
+.agenda-theme:is(.dark *) {
   --bg: #0E0C0A;
   --bg-subtle: #171412;
   --surface: #1C1917;
@@ -425,9 +425,9 @@ html.dark .daily-loop-theme,
 }
 
 /* Daily-loop theme: use Instrument Serif for headings */
-.daily-loop-theme .prose h1,
-.daily-loop-theme .prose h2,
-.daily-loop-theme .prose h3,
-.daily-loop-theme .prose h4 {
+.agenda-theme .prose h1,
+.agenda-theme .prose h2,
+.agenda-theme .prose h3,
+.agenda-theme .prose h4 {
   font-family: 'Instrument Serif', ui-serif, Georgia, serif;
 }

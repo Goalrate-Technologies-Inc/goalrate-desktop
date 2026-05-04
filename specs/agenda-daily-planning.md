@@ -335,11 +335,11 @@ Recommended fields:
 
 ## Current Implementation Notes
 
-- Current Agenda state is stored in `.goalrate/daily-loop.db` with outcomes, completed task IDs, deferrals, check-ins, chat messages, stats, and revisions.
+- Current Agenda state is stored in `.goalrate/agenda.db` with outcomes, completed task IDs, deferrals, check-ins, chat messages, stats, and revisions.
 - Current UI already supports Agenda items, outcomes, checkable tasks, deferrals, and check-ins.
 - Target product behavior moves Agenda authority to `agenda/<yyyy-mm-dd>.md`; SQLite may remain as a fast derived index/cache.
 - Current Agenda loading reads both frontmatter and the recommended markdown schedule body so checkbox edits in `agenda/<yyyy-mm-dd>.md` can flow back into the app.
-- When current Agenda loading reads `agenda/<yyyy-mm-dd>.md`, it should also synchronize the derived `.goalrate/daily-loop.db` plan row so subsequent completions, deferrals, and Assistant updates start from the markdown state.
+- When current Agenda loading reads `agenda/<yyyy-mm-dd>.md`, it should also synchronize the derived `.goalrate/agenda.db` plan row so subsequent completions, deferrals, and Assistant updates start from the markdown state.
 - Current prompts already include deferral confrontation and subtask breakdown concepts. This spec formalizes the 2-day task and subtask flows.
 - Current UI may need to move from ordered task lists toward exact chronological scheduled task rows.
 - Current app includes in-app manual Agenda add, edit, remove, undo, and drag-and-drop reorder controls.

@@ -4,8 +4,8 @@
 
 use chrono::NaiveDate;
 
-use crate::db::DailyLoopDb;
-use crate::error::DailyLoopResult;
+use crate::db::AgendaDb;
+use crate::error::AgendaResult;
 use crate::prompts;
 
 /// Maximum estimated tokens for the context payload
@@ -69,12 +69,12 @@ impl ContextPayload {
 /// Build a context payload from the database and vault data.
 ///
 /// The `goals` and `tasks` parameters come from vault-core (read by the Tauri command layer).
-/// The check-in history and stats come from the DailyLoopDb.
+/// The check-in history and stats come from the AgendaDb.
 pub fn build_context(
-    db: &DailyLoopDb,
+    db: &AgendaDb,
     goals: &[(String, String, Option<String>)],
     tasks: &[prompts::TaskContextRow],
-) -> DailyLoopResult<ContextPayload> {
+) -> AgendaResult<ContextPayload> {
     let goals_context = prompts::format_goals_context(goals);
     let tasks_context = prompts::format_tasks_context(tasks);
 

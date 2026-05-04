@@ -2,7 +2,7 @@
 
 AI-powered daily planning for focused work. Built with [Tauri 2](https://tauri.app/), React 19, and Rust.
 
-GoalRate Desktop is an offline-first desktop app that helps people stay focused on what matters. It combines a local markdown vault with an AI-driven daily loop to plan, prioritize, and reflect on your work.
+GoalRate Desktop is an offline-first desktop app that helps people stay focused on what matters. It combines a local markdown vault with an AI-driven agenda to plan, prioritize, and reflect on your work.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ goalrate-desktop/
 │   └── src-tauri/         # Tauri/Rust backend (IPC commands)
 ├── crates/                # Rust crates
 │   ├── vault-core/        # Local vault file operations
-│   ├── daily-loop/        # AI daily planning engine
+│   ├── agenda/            # AI daily planning engine
 │   ├── focus-engine/      # Focus prioritization & scoring
 │   ├── markdown-parser/   # Markdown + YAML frontmatter parser
 │   ├── sqlite-index/      # SQLite search index

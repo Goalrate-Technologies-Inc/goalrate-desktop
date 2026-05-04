@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Settings, ChevronDown, X } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { useDailyLoop } from '../hooks/useDailyLoop';
+import { useAgenda } from '../hooks/useAgenda';
 import { useVault } from '../context/VaultContext';
-import { DomainSidebar } from './daily-loop/DomainSidebar';
-import { TodaysPlan } from './daily-loop/TodaysPlan';
-import { AiChatPanel } from './daily-loop/AiChatPanel';
-import { IntakeFlow } from './daily-loop/IntakeFlow';
-import { SettingsPanel } from './daily-loop/SettingsPanel';
+import { DomainSidebar } from './agenda/DomainSidebar';
+import { TodaysPlan } from './agenda/TodaysPlan';
+import { AiChatPanel } from './agenda/AiChatPanel';
+import { IntakeFlow } from './agenda/IntakeFlow';
+import { SettingsPanel } from './agenda/SettingsPanel';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   vaultRefreshStatusLabel,
@@ -35,8 +35,8 @@ function formatRefreshTime(value: Date): string {
   return `${displayHour}:${minutes} ${period}`;
 }
 
-export function DailyLoopApp(): React.ReactElement {
-  const dailyLoop = useDailyLoop();
+export function AgendaApp(): React.ReactElement {
+  const agenda = useAgenda();
   const { currentVault, vaults, openVault, closeVault, refreshVaults } = useVault();
   const [showSettings, setShowSettings] = useState(false);
   const [vaultToRemove, setVaultToRemove] = useState<{ id: string; name: string } | null>(null);
@@ -94,7 +94,7 @@ export function DailyLoopApp(): React.ReactElement {
       },
       {
         onError: (err) => {
-          console.error('[DailyLoopApp] Failed to listen for vault changes:', err);
+          console.error('[AgendaApp] Failed to listen for vault changes:', err);
         },
       },
     );
@@ -114,16 +114,16 @@ export function DailyLoopApp(): React.ReactElement {
 
   const handleIntakeComplete = useCallback(async () => {
     setGoalCheck({ vaultId, hasGoals: true });
-    await dailyLoop.refresh();
-  }, [vaultId, dailyLoop]);
+    await agenda.refresh();
+  }, [vaultId, agenda]);
 
   const handleVaultRestored = useCallback(async () => {
     if (vaultId) {
       const goals = await invoke<Array<{ id: string }>>('list_goals', { vaultId });
       setGoalCheck({ vaultId, hasGoals: goals.length > 0 });
     }
-    await dailyLoop.refresh();
-  }, [vaultId, dailyLoop]);
+    await agenda.refresh();
+  }, [vaultId, agenda]);
 
   const handleOpenGoalNotes = useCallback((goalId: string, title: string) => {
     goalNotesRequestIdRef.current += 1;
@@ -164,7 +164,7 @@ export function DailyLoopApp(): React.ReactElement {
 
   return (
     <div
-      className="daily-loop-theme flex h-screen flex-col"
+      className="agenda-theme flex h-screen flex-col"
       style={{ fontFamily: "'Geist', system-ui, sans-serif", backgroundColor: 'var(--bg)' }}
     >
       {/* Header — always visible */}
@@ -259,15 +259,15 @@ export function DailyLoopApp(): React.ReactElement {
       {!isLoading && !needsIntake && (
         <div className="flex min-h-0 flex-1">
           <DomainSidebar
-            dataVersion={dailyLoop.dataVersion}
-            onMutation={() => dailyLoop.refresh()}
+            dataVersion={agenda.dataVersion}
+            onMutation={() => agenda.refresh()}
             openGoalRequest={goalNotesRequest}
           />
           <TodaysPlan
-            dailyLoop={dailyLoop}
+            agenda={agenda}
             onOpenGoalNotes={handleOpenGoalNotes}
           />
-          <AiChatPanel dailyLoop={dailyLoop} />
+          <AiChatPanel agenda={agenda} />
         </div>
       )}
 

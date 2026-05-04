@@ -1,4 +1,4 @@
-//! daily-loop - Assistant-backed Agenda planning for Goalrate
+//! agenda - Assistant-backed Agenda planning for Goalrate
 //!
 //! Provides local SQLite-backed storage for Agenda indexes, outcomes, deferrals,
 //! check-ins, chat messages, and context snapshots. The core data layer for
@@ -18,10 +18,10 @@
 //! # Example
 //!
 //! ```no_run
-//! use daily_loop::DailyLoopDb;
+//! use agenda::AgendaDb;
 //! use chrono::NaiveDate;
 //!
-//! let db = DailyLoopDb::open_in_memory().unwrap();
+//! let db = AgendaDb::open_in_memory().unwrap();
 //! let today = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
 //!
 //! let plan = db.create_plan(today).unwrap();
@@ -40,8 +40,8 @@ pub mod models;
 pub mod prompts;
 
 pub use context::{build_context, ContextPayload};
-pub use db::DailyLoopDb;
-pub use error::{DailyLoopError, DailyLoopResult};
+pub use db::AgendaDb;
+pub use error::{AgendaError, AgendaResult};
 pub use models::*;
 pub use prompts::{
     CHAT_REPRIORITIZE_SYSTEM_PROMPT, CHECK_IN_SUMMARY_PROMPT, DAILY_PLAN_SYSTEM_PROMPT,

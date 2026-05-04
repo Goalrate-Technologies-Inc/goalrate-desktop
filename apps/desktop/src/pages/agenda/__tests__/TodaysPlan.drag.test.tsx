@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { DailyPlan, ScheduledTask } from "@goalrate-app/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { UseDailyLoopReturn } from "../../../hooks/useDailyLoop";
+import type { UseAgendaReturn } from "../../../hooks/useAgenda";
 import { TodaysPlan } from "../TodaysPlan";
 
 function scheduledTask(
@@ -21,10 +21,10 @@ function scheduledTask(
   };
 }
 
-function dailyLoopWithSchedule(
+function agendaWithSchedule(
   scheduledTasks: ScheduledTask[],
   updateScheduledTasks = vi.fn().mockResolvedValue(undefined),
-): UseDailyLoopReturn {
+): UseAgendaReturn {
   const plan: DailyPlan = {
     id: "plan_2026_04_26",
     date: "2026-04-26",
@@ -111,7 +111,7 @@ describe("TodaysPlan drag reorder interaction", () => {
 
   it("persists a keyboard drag reorder using the existing time slots", async () => {
     const updateScheduledTasks = vi.fn().mockResolvedValue(undefined);
-    const dailyLoop = dailyLoopWithSchedule(
+    const agenda = agendaWithSchedule(
       [
         scheduledTask("task_alpha", "Alpha task", "9:00 AM", 30),
         scheduledTask("task_beta", "Beta task", "9:30 AM", 45),
@@ -120,7 +120,7 @@ describe("TodaysPlan drag reorder interaction", () => {
       updateScheduledTasks,
     );
 
-    render(<TodaysPlan dailyLoop={dailyLoop} />);
+    render(<TodaysPlan agenda={agenda} />);
 
     const betaHandle = screen.getByRole("button", {
       name: 'Drag "Beta task" to reorder',

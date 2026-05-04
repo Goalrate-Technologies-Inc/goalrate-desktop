@@ -7,10 +7,10 @@ import type {
   ChatMessage,
   CheckIn,
 } from "@goalrate-app/shared";
-import * as dailyLoopIpc from "../lib/dailyLoopIpc";
-import { DEFAULT_AI_MODEL, type TaskMetadata } from "../lib/dailyLoopIpc";
+import * as agendaIpc from "../lib/agendaIpc";
+import { DEFAULT_AI_MODEL, type TaskMetadata } from "../lib/agendaIpc";
 import {
-  pathsAffectDailyLoop,
+  pathsAffectAgenda,
   vaultUpdatePaths,
   type VaultLibraryUpdatedPayload,
 } from "../lib/vaultWatcherEvents";
@@ -49,7 +49,7 @@ function toLocalDateString(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
-export interface UseDailyLoopReturn {
+export interface UseAgendaReturn {
   // State
   plan: DailyPlan | null;
   outcomes: Outcome[];
@@ -115,7 +115,7 @@ export interface UseDailyLoopReturn {
   dataVersion: number;
 }
 
-export function useDailyLoop(): UseDailyLoopReturn {
+export function useAgenda(): UseAgendaReturn {
   const { currentVault } = useVault();
   const vaultId = currentVault?.id ?? "";
 
@@ -186,10 +186,10 @@ export function useDailyLoop(): UseDailyLoopReturn {
       setError(null);
 
       try {
-        const fetchedPlan = await dailyLoopIpc.getPlan(vaultId, date);
+        const fetchedPlan = await agendaIpc.getPlan(vaultId, date);
         let fetchedWarnings: string[] = [];
         try {
-          fetchedWarnings = await dailyLoopIpc.getAgendaWarnings(vaultId, date);
+          fetchedWarnings = await agendaIpc.getAgendaWarnings(vaultId, date);
         } catch {
           fetchedWarnings = [];
         }
@@ -197,7 +197,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         // Fetch task metadata (priority/deadline) from vault goals
         let fetchedTaskMetadata: Record<string, TaskMetadata> = {};
         try {
-          fetchedTaskMetadata = await dailyLoopIpc.getTaskMetadata(vaultId, date);
+          fetchedTaskMetadata = await agendaIpc.getTaskMetadata(vaultId, date);
         } catch {
           fetchedTaskMetadata = {};
         }
@@ -208,17 +208,17 @@ export function useDailyLoop(): UseDailyLoopReturn {
         if (fetchedPlan) {
           planTitles = fetchedPlan.taskTitles ?? {};
           [fetchedOutcomes, fetchedChat] = await Promise.all([
-            dailyLoopIpc.getOutcomes(vaultId, fetchedPlan.id),
-            dailyLoopIpc.getChatHistory(vaultId, fetchedPlan.id),
+            agendaIpc.getOutcomes(vaultId, fetchedPlan.id),
+            agendaIpc.getChatHistory(vaultId, fetchedPlan.id),
           ]);
         }
 
-        const fetchedCheckIn = await dailyLoopIpc.getCheckIn(vaultId, date);
+        const fetchedCheckIn = await agendaIpc.getCheckIn(vaultId, date);
 
         // Fetch recent stats for completion rate trend (non-blocking)
         let fetchedRecentStats: DailyStats[] = [];
         try {
-          fetchedRecentStats = await dailyLoopIpc.getRecentStats(vaultId, 7);
+          fetchedRecentStats = await agendaIpc.getRecentStats(vaultId, 7);
         } catch {
           fetchedRecentStats = [];
         }
@@ -294,7 +294,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         const paths = vaultUpdatePaths(event.payload ?? {});
         if (
           event.payload?.vaultId === vaultId &&
-          pathsAffectDailyLoop(paths, date)
+          pathsAffectAgenda(paths, date)
         ) {
           refreshFromVaultEvent();
         }
@@ -302,7 +302,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
       {
         onError: (err) => {
           console.error(
-            "[useDailyLoop] Failed to listen for vault changes:",
+            "[useAgenda] Failed to listen for vault changes:",
             err,
           );
         },
@@ -315,7 +315,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
       return;
     }
     try {
-      const newPlan = await dailyLoopIpc.createPlan(vaultId, date);
+      const newPlan = await agendaIpc.createPlan(vaultId, date);
       setPlan(newPlan);
       setAgendaWarnings([]);
       setOutcomes([]);
@@ -333,7 +333,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         return;
       }
       try {
-        const updated = await dailyLoopIpc.updatePlan({
+        const updated = await agendaIpc.updatePlan({
           vaultId,
           planId: plan.id,
           top3OutcomeIds,
@@ -355,7 +355,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         return;
       }
       try {
-        const updated = await dailyLoopIpc.updatePlan({
+        const updated = await agendaIpc.updatePlan({
           vaultId,
           planId: plan.id,
           scheduledTasks,
@@ -377,7 +377,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         return;
       }
       try {
-        const outcome = await dailyLoopIpc.createOutcome({
+        const outcome = await agendaIpc.createOutcome({
           vaultId,
           dailyPlanId: plan.id,
           title,
@@ -400,7 +400,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         return;
       }
       try {
-        const updated = await dailyLoopIpc.updateOutcome({
+        const updated = await agendaIpc.updateOutcome({
           vaultId,
           outcomeId,
           title,
@@ -424,7 +424,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         return;
       }
       try {
-        await dailyLoopIpc.deleteOutcome(vaultId, outcomeId);
+        await agendaIpc.deleteOutcome(vaultId, outcomeId);
         setOutcomes((prev) => prev.filter((o) => o.id !== outcomeId));
         setError(null);
         bumpVersion();
@@ -441,7 +441,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         return;
       }
       try {
-        await dailyLoopIpc.deferTask({ vaultId, taskId, date, reason });
+        await agendaIpc.deferTask({ vaultId, taskId, date, reason });
         setError(null);
         bumpVersion();
         await loadData({ silent: true }); // Refresh plan to reflect deferred task
@@ -455,19 +455,19 @@ export function useDailyLoop(): UseDailyLoopReturn {
   const toggleTaskCompletion = useCallback(
     async (planId: string, taskId: string) => {
       if (!vaultId) {
-        console.warn("[useDailyLoop] toggleTaskCompletion: no vaultId");
+        console.warn("[useAgenda] toggleTaskCompletion: no vaultId");
         return;
       }
       if (!planId) {
-        console.warn("[useDailyLoop] toggleTaskCompletion: no planId");
+        console.warn("[useAgenda] toggleTaskCompletion: no planId");
         return;
       }
       try {
-        await dailyLoopIpc.toggleTaskCompletion(vaultId, planId, taskId);
+        await agendaIpc.toggleTaskCompletion(vaultId, planId, taskId);
         // Silent reload — don't flash loading spinner, just refresh plan from DB
         await loadData({ silent: true });
       } catch (err) {
-        console.error("[useDailyLoop] toggleTaskCompletion FAILED:", err);
+        console.error("[useAgenda] toggleTaskCompletion FAILED:", err);
         setError(extractErrorMessage(err));
         // Reload anyway so UI re-syncs with DB state
         await loadData({ silent: true });
@@ -483,7 +483,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
       }
 
       // 1. Store user message and show it immediately
-      const userMsg = await dailyLoopIpc.sendChat({
+      const userMsg = await agendaIpc.sendChat({
         vaultId,
         dailyPlanId: plan.id,
         content,
@@ -492,7 +492,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
 
       // 2. Call AI to get a response
       try {
-        const aiResponse = await dailyLoopIpc.chatReprioritize(
+        const aiResponse = await agendaIpc.chatReprioritize(
           vaultId,
           plan.id,
           DEFAULT_AI_MODEL,
@@ -500,7 +500,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         );
 
         // 3. Reload chat history to include the AI response stored by the backend
-        const updatedHistory = await dailyLoopIpc.getChatHistory(
+        const updatedHistory = await agendaIpc.getChatHistory(
           vaultId,
           plan.id,
         );
@@ -548,7 +548,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
         return;
       }
       try {
-        const ci = await dailyLoopIpc.createCheckIn({
+        const ci = await agendaIpc.createCheckIn({
           vaultId,
           date,
           completedTaskIds,
@@ -570,7 +570,7 @@ export function useDailyLoop(): UseDailyLoopReturn {
       return;
     }
     try {
-      await dailyLoopIpc.openAgendaErrorLog(vaultId);
+      await agendaIpc.openAgendaErrorLog(vaultId);
       setError(null);
     } catch (err) {
       setError(extractErrorMessage(err));

@@ -4,7 +4,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import type { DailyPlan } from "@goalrate-app/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupTauriEventMock } from "../../test/utils/mockTauri";
-import { DailyLoopApp } from "../DailyLoopApp";
+import { AgendaApp } from "../AgendaApp";
 
 vi.mock("../../context/VaultContext", () => ({
   useVault: () => ({
@@ -22,15 +22,15 @@ vi.mock("../../context/VaultContext", () => ({
   }),
 }));
 
-vi.mock("../daily-loop/TodaysPlan", () => ({
+vi.mock("../agenda/TodaysPlan", () => ({
   TodaysPlan: () => <div>Agenda panel</div>,
 }));
 
-vi.mock("../daily-loop/AiChatPanel", () => ({
+vi.mock("../agenda/AiChatPanel", () => ({
   AiChatPanel: () => <div>Assistant panel</div>,
 }));
 
-vi.mock("../daily-loop/IntakeFlow", () => ({
+vi.mock("../agenda/IntakeFlow", () => ({
   IntakeFlow: () => <div>Intake flow</div>,
 }));
 
@@ -64,7 +64,7 @@ function planFor(date: string, taskId: string): DailyPlan {
   };
 }
 
-describe("DailyLoopApp vault watcher contract", () => {
+describe("AgendaApp vault watcher contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listen).mockResolvedValue(() => {});
@@ -104,7 +104,7 @@ describe("DailyLoopApp vault watcher contract", () => {
               ],
         );
       }
-      if (command === "daily_loop_get_plan") {
+      if (command === "agenda_get_plan") {
         getPlanCalls += 1;
         const inputDate =
           typeof args === "object" &&
@@ -115,22 +115,22 @@ describe("DailyLoopApp vault watcher contract", () => {
             : today;
         return Promise.resolve(planFor(inputDate, `task_${getPlanCalls}`));
       }
-      if (command === "daily_loop_get_agenda_warnings") {
+      if (command === "agenda_get_agenda_warnings") {
         return Promise.resolve([]);
       }
-      if (command === "daily_loop_get_task_metadata") {
+      if (command === "agenda_get_task_metadata") {
         return Promise.resolve({});
       }
-      if (command === "daily_loop_get_outcomes") {
+      if (command === "agenda_get_outcomes") {
         return Promise.resolve([]);
       }
-      if (command === "daily_loop_get_chat_history") {
+      if (command === "agenda_get_chat_history") {
         return Promise.resolve([]);
       }
-      if (command === "daily_loop_get_check_in") {
+      if (command === "agenda_get_check_in") {
         return Promise.resolve(null);
       }
-      if (command === "daily_loop_get_recent_stats") {
+      if (command === "agenda_get_recent_stats") {
         return Promise.resolve([]);
       }
       if (command === "check_api_keys") {
@@ -147,7 +147,7 @@ describe("DailyLoopApp vault watcher contract", () => {
       return Promise.resolve(undefined);
     });
 
-    render(<DailyLoopApp />);
+    render(<AgendaApp />);
 
     expect(await screen.findByText("Launch before")).toBeInTheDocument();
     expect(await screen.findByText("Agenda panel")).toBeInTheDocument();

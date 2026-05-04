@@ -113,7 +113,7 @@ The user should be able to:
 
 ## Current Implementation Notes
 
-- The current desktop app already has a Daily Loop layout with a vault selector, intake flow, roadmap-like Roadmap sidebar, Agenda panel, and Assistant panel.
+- The current desktop app already has an Agenda layout with a vault selector, intake flow, roadmap-like Roadmap sidebar, Agenda panel, and Assistant panel.
 - The current intake flow collects initial Domains, Goals, Tasks, Memory planning constraints, and remote/update consent choices, then persists them through vault markdown commands during onboarding.
 - Removing the active vault reference closes the active workspace and returns the user to the intake flow without deleting local vault files.
 - Native desktop menu actions for new, open, and close vault already share the close-vault path. The initial production Mac channel is direct website distribution, so update UX should be handled by the direct Mac update path when implemented rather than by the Mac App Store.

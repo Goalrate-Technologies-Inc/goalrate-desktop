@@ -10,18 +10,18 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use tauri::State;
 
-use daily_loop::{
+use agenda::{
     build_context, ChatRole, RevisionTrigger, CHAT_REPRIORITIZE_SYSTEM_PROMPT,
     CHECK_IN_SUMMARY_PROMPT, DAILY_PLAN_SYSTEM_PROMPT,
 };
 
-use crate::commands::daily_loop::{
+use crate::commands::agenda::{
     apply_memory_limits_to_explicit_schedule_for_date, apply_memory_to_generated_schedule_for_date,
     build_scheduled_tasks, derive_eisenhower_quadrant_for_task_title,
     is_pending_agenda_task_for_scheduled_date, memory_agenda_targets_for_date,
     memory_prompt_context, normalize_agenda_time_label, read_agenda_overlay,
     task_quadrants_from_vault, task_specific_agenda_date, title_inferred_eisenhower_quadrant,
-    with_db, write_agenda_markdown_for_plan, DAILY_LOOP_DBS,
+    with_db, write_agenda_markdown_for_plan, AGENDA_DBS,
 };
 use crate::commands::goals::{
     list_goal_frontmatter_tasks_from_manager, validate_goal_frontmatter_tasks_for_write,
@@ -38,8 +38,8 @@ const ANTHROPIC_MESSAGES_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const OPENAI_CHAT_URL: &str = "https://api.openai.com/v1/chat/completions";
 const GOALRATE_HOSTED_AI_URL: &str = "https://api.goalrate.com/api/desktop/ai/completions";
-const HOSTED_AI_PRIMARY_ROUTE_MODEL_ID: &str = "goalrate::daily-loop-balanced";
-const HOSTED_AI_BACKFILL_ROUTE_MODEL_ID: &str = "goalrate::daily-loop-economy";
+const HOSTED_AI_PRIMARY_ROUTE_MODEL_ID: &str = "goalrate::agenda-balanced";
+const HOSTED_AI_BACKFILL_ROUTE_MODEL_ID: &str = "goalrate::agenda-economy";
 const AI_OVERLOADED_STATUS_CODE: u16 = 529;
 const AI_OVERLOADED_RETRY_DELAY_MS: u64 = 2_000;
 
@@ -291,8 +291,8 @@ fn parse_provider_model(model_id: &str) -> (&str, &str) {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneratedPlanResponse {
-    pub plan: daily_loop::DailyPlan,
-    pub outcomes: Vec<daily_loop::Outcome>,
+    pub plan: agenda::DailyPlan,
+    pub outcomes: Vec<agenda::Outcome>,
     pub daily_insight: Option<String>,
     pub pattern_note: Option<String>,
     pub deferrals_confrontation: Vec<DeferralConfrontation>,
@@ -312,9 +312,9 @@ pub struct DeferralConfrontation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatReprioritizeResponse {
-    pub ai_message: daily_loop::ChatMessage,
+    pub ai_message: agenda::ChatMessage,
     pub plan_updated: bool,
-    pub updated_plan: Option<daily_loop::DailyPlan>,
+    pub updated_plan: Option<agenda::DailyPlan>,
     /// Task titles from AI-generated tasks in the plan update
     pub task_titles: std::collections::HashMap<String, String>,
 }
@@ -904,7 +904,7 @@ fn scheduled_task_title_needs_replacement(title: &str, task_id: &str) -> bool {
 }
 
 fn apply_known_titles_to_scheduled_tasks(
-    scheduled_tasks: &mut [daily_loop::ScheduledTask],
+    scheduled_tasks: &mut [agenda::ScheduledTask],
     task_titles: &std::collections::HashMap<String, String>,
     vault_task_titles: &std::collections::HashMap<String, String>,
 ) {
@@ -918,7 +918,7 @@ fn apply_known_titles_to_scheduled_tasks(
 }
 
 fn apply_derived_quadrants_to_scheduled_tasks(
-    scheduled_tasks: &mut [daily_loop::ScheduledTask],
+    scheduled_tasks: &mut [agenda::ScheduledTask],
     task_quadrants: &std::collections::HashMap<String, String>,
 ) {
     for task in scheduled_tasks {
@@ -1113,7 +1113,7 @@ fn gather_vault_context(
         }
 
         let deferral_count = {
-            let dbs = DAILY_LOOP_DBS.lock().ok();
+            let dbs = AGENDA_DBS.lock().ok();
             dbs.as_ref()
                 .and_then(|d| d.get(vault_id))
                 .and_then(|db| db.get_deferral_count(&task.id).ok())
@@ -1291,7 +1291,7 @@ async fn fresh_agenda_regeneration(
     vault_id: &str,
     app_state: &AppState,
     model_id: &str,
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     goals: &[VaultGoalContext],
     tasks: &[VaultTaskContext],
     latest_user_request: &str,
@@ -1434,7 +1434,7 @@ async fn fresh_agenda_regeneration(
     })
 }
 
-fn parse_ai_scheduled_tasks(parsed: &Value) -> Vec<daily_loop::ScheduledTask> {
+fn parse_ai_scheduled_tasks(parsed: &Value) -> Vec<agenda::ScheduledTask> {
     parsed
         .get("scheduled_tasks")
         .or_else(|| parsed.get("scheduledTasks"))
@@ -1462,7 +1462,7 @@ fn parse_ai_scheduled_tasks(parsed: &Value) -> Vec<daily_loop::ScheduledTask> {
                         .or_else(|| item.get("durationMinutes"))
                         .and_then(Value::as_i64)
                         .unwrap_or(30) as i32;
-                    Some(daily_loop::ScheduledTask {
+                    Some(agenda::ScheduledTask {
                         id: item
                             .get("id")
                             .and_then(Value::as_str)
@@ -1500,7 +1500,7 @@ struct FreshAgendaRegeneration {
     generated_at: String,
     task_order: Vec<String>,
     task_titles: std::collections::HashMap<String, String>,
-    scheduled_tasks: Vec<daily_loop::ScheduledTask>,
+    scheduled_tasks: Vec<agenda::ScheduledTask>,
     outcome_specs: Vec<OutcomeSpec>,
     new_tasks: Vec<(String, String, String, Option<String>)>,
 }
@@ -1574,7 +1574,7 @@ fn parse_plan_update_task_ids(update: &Value) -> Vec<String> {
 
 fn plan_update_reorder_changes_visible_order(
     update: &Value,
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
 ) -> bool {
     if update.get("action").and_then(Value::as_str) != Some("reorder") {
         return true;
@@ -1599,7 +1599,7 @@ fn plan_update_reorder_changes_visible_order(
     merge_partial_reorder(&current_order, &parsed_ids) != current_order
 }
 
-fn visible_schedule_task_ids(plan: &daily_loop::DailyPlan) -> Vec<String> {
+fn visible_schedule_task_ids(plan: &agenda::DailyPlan) -> Vec<String> {
     let source: Vec<String> = if plan.scheduled_tasks.is_empty() {
         plan.task_order.clone()
     } else {
@@ -1617,7 +1617,7 @@ fn visible_schedule_task_ids(plan: &daily_loop::DailyPlan) -> Vec<String> {
         .collect()
 }
 
-fn outcome_title_for_task_id(plan: &daily_loop::DailyPlan, task_id: &str) -> String {
+fn outcome_title_for_task_id(plan: &agenda::DailyPlan, task_id: &str) -> String {
     plan.scheduled_tasks
         .iter()
         .find(|task| task.task_id == task_id)
@@ -1639,9 +1639,9 @@ fn outcome_title_for_task_id(plan: &daily_loop::DailyPlan, task_id: &str) -> Str
 }
 
 fn outcomes_in_plan_order(
-    plan: &daily_loop::DailyPlan,
-    outcomes: &[daily_loop::Outcome],
-) -> Vec<daily_loop::Outcome> {
+    plan: &agenda::DailyPlan,
+    outcomes: &[agenda::Outcome],
+) -> Vec<agenda::Outcome> {
     let mut remaining = outcomes.to_vec();
     let mut ordered = Vec::new();
 
@@ -1659,8 +1659,8 @@ fn outcomes_in_plan_order(
 }
 
 fn desired_outcome_specs_for_schedule(
-    plan: &daily_loop::DailyPlan,
-    existing_outcomes: &[daily_loop::Outcome],
+    plan: &agenda::DailyPlan,
+    existing_outcomes: &[agenda::Outcome],
     requested_outcomes: &[OutcomeSpec],
 ) -> Vec<OutcomeSpec> {
     let visible_task_ids = visible_schedule_task_ids(plan);
@@ -1714,10 +1714,10 @@ fn desired_outcome_specs_for_schedule(
 }
 
 fn sync_outcomes_for_schedule(
-    db: &daily_loop::DailyLoopDb,
-    plan: &daily_loop::DailyPlan,
+    db: &agenda::AgendaDb,
+    plan: &agenda::DailyPlan,
     requested_outcomes: &[OutcomeSpec],
-) -> daily_loop::DailyLoopResult<(daily_loop::DailyPlan, Vec<daily_loop::Outcome>)> {
+) -> agenda::AgendaResult<(agenda::DailyPlan, Vec<agenda::Outcome>)> {
     let existing_outcomes = db.get_outcomes_for_plan(&plan.id)?;
     let desired_specs =
         desired_outcome_specs_for_schedule(plan, &existing_outcomes, requested_outcomes);
@@ -1781,7 +1781,7 @@ fn sync_outcomes_for_schedule(
     Ok((reconciled_plan, synced_outcomes))
 }
 
-fn scheduled_updates_cover_order(updates: &[daily_loop::ScheduledTask], order: &[String]) -> bool {
+fn scheduled_updates_cover_order(updates: &[agenda::ScheduledTask], order: &[String]) -> bool {
     if order.is_empty() {
         return false;
     }
@@ -1800,7 +1800,7 @@ fn action_requires_visible_agenda_change(action: &str) -> bool {
 fn scheduled_update_order_for_action(
     action: &str,
     current_order: &[String],
-    updates: &[daily_loop::ScheduledTask],
+    updates: &[agenda::ScheduledTask],
 ) -> Option<Vec<String>> {
     if updates.is_empty() {
         return None;
@@ -1867,8 +1867,8 @@ fn merge_schedule_update_order(current_order: &[String], parsed_ids: &[String]) 
 }
 
 fn scheduled_task_order_changed(
-    scheduled: Option<&[daily_loop::ScheduledTask]>,
-    current: &[daily_loop::ScheduledTask],
+    scheduled: Option<&[agenda::ScheduledTask]>,
+    current: &[agenda::ScheduledTask],
 ) -> bool {
     let Some(scheduled) = scheduled else {
         return false;
@@ -1920,7 +1920,7 @@ fn compact_target_key(text: &str) -> String {
 }
 
 fn removal_target_matches(
-    task: &daily_loop::ScheduledTask,
+    task: &agenda::ScheduledTask,
     target_id: &str,
     target_title: Option<&str>,
 ) -> bool {
@@ -1964,10 +1964,10 @@ fn message_targets_second_occurrence(message: &str) -> bool {
 }
 
 fn remove_scheduled_tasks_once(
-    current: &[daily_loop::ScheduledTask],
+    current: &[agenda::ScheduledTask],
     targets: &[(String, Option<String>)],
     message: &str,
-) -> Option<Vec<daily_loop::ScheduledTask>> {
+) -> Option<Vec<agenda::ScheduledTask>> {
     if current.is_empty() || targets.is_empty() {
         return None;
     }
@@ -2001,9 +2001,9 @@ fn remove_scheduled_tasks_once(
 }
 
 fn filter_existing_schedule_to_order(
-    current: &[daily_loop::ScheduledTask],
+    current: &[agenda::ScheduledTask],
     final_order: &[String],
-) -> Option<Vec<daily_loop::ScheduledTask>> {
+) -> Option<Vec<agenda::ScheduledTask>> {
     if current.is_empty() {
         return None;
     }
@@ -2126,7 +2126,7 @@ fn title_matches_phrase(title: &str, phrase: &str) -> bool {
 }
 
 fn find_dependency_subject_index(
-    scheduled: &[daily_loop::ScheduledTask],
+    scheduled: &[agenda::ScheduledTask],
     message: &str,
 ) -> Option<usize> {
     for phrase in quoted_phrases(message) {
@@ -2173,7 +2173,7 @@ fn find_dependency_subject_index(
 }
 
 fn find_dependency_prerequisite_index(
-    scheduled: &[daily_loop::ScheduledTask],
+    scheduled: &[agenda::ScheduledTask],
     dependent_index: usize,
     message: &str,
 ) -> Option<usize> {
@@ -2226,9 +2226,9 @@ fn find_dependency_prerequisite_index(
 }
 
 fn dependency_reorder_from_message(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     message: &str,
-) -> Option<daily_loop::DailyPlan> {
+) -> Option<agenda::DailyPlan> {
     if current_plan.scheduled_tasks.len() < 2 {
         return None;
     }
@@ -2500,7 +2500,7 @@ fn routine_sequence_rank(title: &str, message: &str) -> Option<usize> {
 }
 
 fn matching_task_score(
-    task: &daily_loop::ScheduledTask,
+    task: &agenda::ScheduledTask,
     phrase_tokens: &std::collections::HashSet<String>,
     context_tokens: &std::collections::HashSet<String>,
 ) -> usize {
@@ -2518,7 +2518,7 @@ fn instruction_required_stage(phrase: &str) -> Option<&'static str> {
 }
 
 fn find_schedule_task_matching_instruction(
-    scheduled: &[daily_loop::ScheduledTask],
+    scheduled: &[agenda::ScheduledTask],
     phrase: &str,
     context_index: usize,
 ) -> Option<usize> {
@@ -2568,10 +2568,7 @@ fn routine_subject_tokens(title: &str) -> std::collections::HashSet<String> {
         .collect()
 }
 
-fn routine_rows_share_subject(
-    left: &daily_loop::ScheduledTask,
-    right: &daily_loop::ScheduledTask,
-) -> bool {
+fn routine_rows_share_subject(left: &agenda::ScheduledTask, right: &agenda::ScheduledTask) -> bool {
     let left_subject = routine_subject_tokens(&left.title);
     let right_subject = routine_subject_tokens(&right.title);
     if left_subject.is_empty() || right_subject.is_empty() {
@@ -2581,16 +2578,16 @@ fn routine_rows_share_subject(
 }
 
 fn reorder_related_rows_by_user_sequence(
-    mut scheduled: Vec<daily_loop::ScheduledTask>,
+    mut scheduled: Vec<agenda::ScheduledTask>,
     context_index: usize,
     message: &str,
-) -> Vec<daily_loop::ScheduledTask> {
+) -> Vec<agenda::ScheduledTask> {
     if ordinal_step_clauses(message).is_empty() || context_index >= scheduled.len() {
         return scheduled;
     }
 
     let context_task = scheduled[context_index].clone();
-    let mut related: Vec<(usize, daily_loop::ScheduledTask, usize)> = scheduled
+    let mut related: Vec<(usize, agenda::ScheduledTask, usize)> = scheduled
         .iter()
         .cloned()
         .enumerate()
@@ -2613,7 +2610,7 @@ fn reorder_related_rows_by_user_sequence(
         .min()
         .copied()
         .unwrap_or(context_index);
-    let ordered_related: Vec<daily_loop::ScheduledTask> =
+    let ordered_related: Vec<agenda::ScheduledTask> =
         related.into_iter().map(|(_, task, _)| task).collect();
     scheduled = scheduled
         .into_iter()
@@ -2643,7 +2640,7 @@ fn instruction_task_title(phrase: &str, context_title: &str) -> String {
     capitalize_task_title(&title)
 }
 
-fn instruction_task_id(title: &str, existing: &[daily_loop::ScheduledTask]) -> String {
+fn instruction_task_id(title: &str, existing: &[agenda::ScheduledTask]) -> String {
     let slug = normalized_word_tokens(title).join("_");
     let base = sanitize_task_id(&format!("task_{slug}"));
     let mut id = base.clone();
@@ -2750,8 +2747,8 @@ fn title_from_schedule_clause(clause: &str) -> Option<String> {
 
 fn existing_task_for_title(
     title: &str,
-    existing: &[daily_loop::ScheduledTask],
-) -> Option<daily_loop::ScheduledTask> {
+    existing: &[agenda::ScheduledTask],
+) -> Option<agenda::ScheduledTask> {
     existing
         .iter()
         .find(|task| task.title.eq_ignore_ascii_case(title))
@@ -2768,8 +2765,8 @@ fn scheduled_task_for_instruction(
     title: String,
     start_time: NaiveTime,
     duration_minutes: i32,
-    existing: &[daily_loop::ScheduledTask],
-) -> daily_loop::ScheduledTask {
+    existing: &[agenda::ScheduledTask],
+) -> agenda::ScheduledTask {
     if let Some(mut task) = existing_task_for_title(&title, existing) {
         task.title = title;
         task.start_time = format_schedule_time(start_time);
@@ -2783,7 +2780,7 @@ fn scheduled_task_for_instruction(
     let task_id = instruction_task_id(&title, existing);
     let eisenhower_quadrant =
         title_inferred_eisenhower_quadrant(&title).unwrap_or_else(|| "do".to_string());
-    daily_loop::ScheduledTask {
+    agenda::ScheduledTask {
         id: format!("scheduled_{task_id}"),
         task_id,
         title,
@@ -2795,9 +2792,9 @@ fn scheduled_task_for_instruction(
 }
 
 fn explicit_schedule_rows_from_message(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     message: &str,
-) -> Option<Vec<daily_loop::ScheduledTask>> {
+) -> Option<Vec<agenda::ScheduledTask>> {
     let start_time = extract_meridiem_time(&message.to_ascii_lowercase())?;
     let clauses = explicit_schedule_clauses(message);
     let first_instruction_index = clauses.iter().position(|clause| {
@@ -2842,7 +2839,7 @@ fn explicit_schedule_rows_from_message(
 }
 
 fn explicit_rows_related_to_generated(
-    task: &daily_loop::ScheduledTask,
+    task: &agenda::ScheduledTask,
     generated_subjects: &std::collections::HashSet<String>,
 ) -> bool {
     let task_subjects = routine_subject_tokens(&task.title);
@@ -2852,9 +2849,9 @@ fn explicit_rows_related_to_generated(
 }
 
 fn explicit_schedule_instruction_update(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     message: &str,
-) -> Option<daily_loop::DailyPlan> {
+) -> Option<agenda::DailyPlan> {
     let generated_rows = explicit_schedule_rows_from_message(current_plan, message)?;
     let generated_subjects: std::collections::HashSet<String> = generated_rows
         .iter()
@@ -2872,7 +2869,7 @@ fn explicit_schedule_instruction_update(
         .iter()
         .position(|task| parse_schedule_time(&task.start_time) == generated_start)
         .unwrap_or(0);
-    let mut scheduled: Vec<daily_loop::ScheduledTask> = current_plan
+    let mut scheduled: Vec<agenda::ScheduledTask> = current_plan
         .scheduled_tasks
         .iter()
         .filter(|task| !explicit_rows_related_to_generated(task, &generated_subjects))
@@ -2912,9 +2909,9 @@ fn explicit_schedule_instruction_update(
 }
 
 fn first_task_instruction_update(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     message: &str,
-) -> Option<daily_loop::DailyPlan> {
+) -> Option<agenda::DailyPlan> {
     let (target_time, phrase) = extract_first_task_instruction(message)?;
     if current_plan.scheduled_tasks.is_empty() {
         return None;
@@ -2937,7 +2934,7 @@ fn first_task_instruction_update(
         let context_task = current_plan.scheduled_tasks.get(slot_index)?;
         let title = instruction_task_title(&phrase, &context_task.title);
         let task_id = instruction_task_id(&title, &current_plan.scheduled_tasks);
-        daily_loop::ScheduledTask {
+        agenda::ScheduledTask {
             id: format!("scheduled_{task_id}"),
             task_id,
             title,
@@ -3020,7 +3017,7 @@ fn insertion_phrase_from_message(message: &str) -> Option<String> {
 fn insertion_task_from_message(
     message: &str,
     candidates: &[VaultTaskContext],
-    current: &[daily_loop::ScheduledTask],
+    current: &[agenda::ScheduledTask],
 ) -> Option<(String, String, Option<String>)> {
     let phrase = insertion_phrase_from_message(message)?;
     let phrase_tokens: std::collections::HashSet<String> =
@@ -3083,7 +3080,7 @@ fn schedule_title_matches_subject(title: &str, subject: Option<&str>) -> bool {
 }
 
 fn between_laundry_anchor_indexes(
-    current: &[daily_loop::ScheduledTask],
+    current: &[agenda::ScheduledTask],
     message: &str,
 ) -> Option<(usize, usize)> {
     let subject = message_laundry_subject(message);
@@ -3104,10 +3101,10 @@ fn between_laundry_anchor_indexes(
 }
 
 fn insert_between_agenda_tasks_update(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     message: &str,
     candidates: &[VaultTaskContext],
-) -> Option<(daily_loop::DailyPlan, String)> {
+) -> Option<(agenda::DailyPlan, String)> {
     if !message_requests_between_task_insertion(message) || current_plan.scheduled_tasks.is_empty()
     {
         return None;
@@ -3139,7 +3136,7 @@ fn insert_between_agenda_tasks_update(
         .signed_duration_since(insert_start)
         .num_minutes()
         .max(5) as i32;
-    let inserted = daily_loop::ScheduledTask {
+    let inserted = agenda::ScheduledTask {
         id: format!("scheduled_{task_id}"),
         task_id,
         title: title.clone(),
@@ -3209,7 +3206,7 @@ fn scheduled_title_matches_routine_title(task_title: &str, routine_title: &str) 
 }
 
 fn is_requested_morning_routine_row(
-    task: &daily_loop::ScheduledTask,
+    task: &agenda::ScheduledTask,
     routine_titles: &[String],
 ) -> bool {
     routine_titles
@@ -3232,7 +3229,7 @@ fn breakfast_duration_minutes_from_message(message: &str) -> Option<i32> {
 }
 
 fn apply_breakfast_duration_hint(
-    scheduled: &mut [daily_loop::ScheduledTask],
+    scheduled: &mut [agenda::ScheduledTask],
     duration_minutes: i32,
 ) -> bool {
     let mut changed = false;
@@ -3248,9 +3245,9 @@ fn apply_breakfast_duration_hint(
 }
 
 fn breakfast_duration_update(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     message: &str,
-) -> Option<daily_loop::DailyPlan> {
+) -> Option<agenda::DailyPlan> {
     let duration_minutes = breakfast_duration_minutes_from_message(message)?.max(5);
     if current_plan.scheduled_tasks.is_empty() {
         return None;
@@ -3278,10 +3275,10 @@ fn breakfast_duration_update(
 }
 
 fn insert_morning_routine_after_breakfast_update(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     message: &str,
     duration_context: &str,
-) -> Option<daily_loop::DailyPlan> {
+) -> Option<agenda::DailyPlan> {
     let titles = morning_routine_titles_after_breakfast(message)?;
     if current_plan.scheduled_tasks.is_empty() {
         return None;
@@ -3539,9 +3536,9 @@ fn direct_agenda_task_title(message: &str) -> Option<(NaiveTime, String)> {
 }
 
 fn direct_agenda_task_update(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     message: &str,
-) -> Option<daily_loop::DailyPlan> {
+) -> Option<agenda::DailyPlan> {
     let (start_time, title) = direct_agenda_task_title(message)?;
     let row = scheduled_task_for_instruction(title, start_time, 30, &current_plan.scheduled_tasks);
     insert_fixed_time_row(current_plan, row)
@@ -3563,12 +3560,12 @@ fn fixed_time_commitment_duration_minutes(title: &str) -> i32 {
 }
 
 fn insert_fixed_time_row(
-    current_plan: &daily_loop::DailyPlan,
-    row: daily_loop::ScheduledTask,
-) -> Option<daily_loop::DailyPlan> {
+    current_plan: &agenda::DailyPlan,
+    row: agenda::ScheduledTask,
+) -> Option<agenda::DailyPlan> {
     let fixed_start = parse_schedule_time(&row.start_time)?;
     let fixed_end = scheduled_task_end(&row)?;
-    let mut scheduled: Vec<daily_loop::ScheduledTask> = current_plan
+    let mut scheduled: Vec<agenda::ScheduledTask> = current_plan
         .scheduled_tasks
         .iter()
         .filter(|task| {
@@ -3623,9 +3620,9 @@ fn insert_fixed_time_row(
 }
 
 fn fixed_time_commitment_update(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     message: &str,
-) -> Option<daily_loop::DailyPlan> {
+) -> Option<agenda::DailyPlan> {
     let (start_time, title) = fixed_time_commitment_title(message)?;
     let duration_minutes = fixed_time_commitment_duration_minutes(&title);
     let row = scheduled_task_for_instruction(
@@ -3638,30 +3635,30 @@ fn fixed_time_commitment_update(
 }
 
 fn reorder_existing_schedule(
-    current: &[daily_loop::ScheduledTask],
+    current: &[agenda::ScheduledTask],
     final_order: &[String],
-) -> Option<Vec<daily_loop::ScheduledTask>> {
+) -> Option<Vec<agenda::ScheduledTask>> {
     reorder_schedule_with_partial_updates(current, final_order, &[])
 }
 
 fn reorder_schedule_with_partial_updates(
-    current: &[daily_loop::ScheduledTask],
+    current: &[agenda::ScheduledTask],
     final_order: &[String],
-    updates: &[daily_loop::ScheduledTask],
-) -> Option<Vec<daily_loop::ScheduledTask>> {
+    updates: &[agenda::ScheduledTask],
+) -> Option<Vec<agenda::ScheduledTask>> {
     if current.is_empty() || final_order.is_empty() {
         return None;
     }
 
-    let mut current_by_id: std::collections::HashMap<&str, &daily_loop::ScheduledTask> = current
+    let mut current_by_id: std::collections::HashMap<&str, &agenda::ScheduledTask> = current
         .iter()
         .map(|task| (task.task_id.as_str(), task))
         .collect();
-    let mut updates_by_id: std::collections::HashMap<&str, &daily_loop::ScheduledTask> = updates
+    let mut updates_by_id: std::collections::HashMap<&str, &agenda::ScheduledTask> = updates
         .iter()
         .map(|task| (task.task_id.as_str(), task))
         .collect();
-    let reordered: Vec<daily_loop::ScheduledTask> = final_order
+    let reordered: Vec<agenda::ScheduledTask> = final_order
         .iter()
         .enumerate()
         .filter_map(|(index, id)| {
@@ -4044,7 +4041,7 @@ fn regenerated_task_order(tasks: &[VaultTaskContext], current_order: &[String]) 
 
 fn task_titles_for_order(
     tasks: &[VaultTaskContext],
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     order: &[String],
 ) -> std::collections::HashMap<String, String> {
     let title_by_id: std::collections::HashMap<&str, &str> = tasks
@@ -4082,12 +4079,12 @@ fn format_schedule_time(time: NaiveTime) -> String {
         .to_string()
 }
 
-fn scheduled_task_end(task: &daily_loop::ScheduledTask) -> Option<NaiveTime> {
+fn scheduled_task_end(task: &agenda::ScheduledTask) -> Option<NaiveTime> {
     parse_schedule_time(&task.start_time)
         .map(|start| start + Duration::minutes(task.duration_minutes.max(5).into()))
 }
 
-fn scheduled_task_starts_before(task: &daily_loop::ScheduledTask, cutoff: NaiveTime) -> bool {
+fn scheduled_task_starts_before(task: &agenda::ScheduledTask, cutoff: NaiveTime) -> bool {
     let Some(start) = parse_schedule_time(&task.start_time) else {
         return true;
     };
@@ -4097,18 +4094,18 @@ fn scheduled_task_starts_before(task: &daily_loop::ScheduledTask, cutoff: NaiveT
     start < cutoff && end <= cutoff
 }
 
-fn sort_scheduled_tasks(tasks: &mut [daily_loop::ScheduledTask]) {
+fn sort_scheduled_tasks(tasks: &mut [agenda::ScheduledTask]) {
     tasks.sort_by_key(|task| parse_schedule_time(&task.start_time).unwrap_or(NaiveTime::MIN));
 }
 
-fn normalize_scheduled_tasks(tasks: &mut Vec<daily_loop::ScheduledTask>) {
+fn normalize_scheduled_tasks(tasks: &mut Vec<agenda::ScheduledTask>) {
     sort_scheduled_tasks(tasks);
     let mut seen_task_ids = std::collections::HashSet::new();
     tasks.retain(|task| task.task_id.is_empty() || seen_task_ids.insert(task.task_id.clone()));
 }
 
 fn shift_schedule_not_before(
-    tasks: &mut [daily_loop::ScheduledTask],
+    tasks: &mut [agenda::ScheduledTask],
     earliest_start: NaiveTime,
 ) -> bool {
     if tasks.is_empty() {
@@ -4147,7 +4144,7 @@ fn next_visible_agenda_minute_after(time: NaiveTime) -> NaiveTime {
         .0
 }
 
-fn is_memory_schedule_row(task: &daily_loop::ScheduledTask) -> bool {
+fn is_memory_schedule_row(task: &agenda::ScheduledTask) -> bool {
     task.estimate_source.as_deref() == Some("memory") || task.task_id.starts_with("memory_")
 }
 
@@ -4171,7 +4168,7 @@ fn next_start_avoiding_fixed_rows(
 }
 
 fn align_regenerated_schedule_after_start(
-    plan: &mut daily_loop::DailyPlan,
+    plan: &mut agenda::DailyPlan,
     earliest_start: NaiveTime,
 ) -> bool {
     let original = plan.scheduled_tasks.clone();
@@ -4237,7 +4234,7 @@ fn align_regenerated_schedule_after_start(
     true
 }
 
-fn align_today_regenerated_schedule_after_now(plan: &mut daily_loop::DailyPlan) -> bool {
+fn align_today_regenerated_schedule_after_now(plan: &mut agenda::DailyPlan) -> bool {
     let now = chrono::Local::now();
     if plan.date != now.date_naive() {
         return false;
@@ -4247,11 +4244,11 @@ fn align_today_regenerated_schedule_after_now(plan: &mut daily_loop::DailyPlan) 
 }
 
 fn apply_chat_planning_adjustments(
-    current_plan: &daily_loop::DailyPlan,
+    current_plan: &agenda::DailyPlan,
     adjustments: &ChatPlanningAdjustments,
     generated_at: &str,
     task_quadrants: &std::collections::HashMap<String, String>,
-) -> Option<daily_loop::DailyPlan> {
+) -> Option<agenda::DailyPlan> {
     if !adjustments.has_actionable_change() {
         return None;
     }
@@ -4294,17 +4291,17 @@ fn apply_chat_planning_adjustments(
 }
 
 fn merge_chat_schedule_updates(
-    current: &[daily_loop::ScheduledTask],
+    current: &[agenda::ScheduledTask],
     final_order: &[String],
-    updates: Vec<daily_loop::ScheduledTask>,
+    updates: Vec<agenda::ScheduledTask>,
     action: &str,
-) -> Vec<daily_loop::ScheduledTask> {
+) -> Vec<agenda::ScheduledTask> {
     if updates.is_empty() {
         return Vec::new();
     }
 
     let update_order: Vec<String> = updates.iter().map(|task| task.task_id.clone()).collect();
-    let mut updates_by_id: std::collections::HashMap<String, daily_loop::ScheduledTask> = updates
+    let mut updates_by_id: std::collections::HashMap<String, agenda::ScheduledTask> = updates
         .into_iter()
         .map(|task| (task.task_id.clone(), task))
         .collect();
@@ -4325,7 +4322,7 @@ fn merge_chat_schedule_updates(
             .collect();
     }
 
-    let current_by_id: std::collections::HashMap<&str, &daily_loop::ScheduledTask> = current
+    let current_by_id: std::collections::HashMap<&str, &agenda::ScheduledTask> = current
         .iter()
         .map(|task| (task.task_id.as_str(), task))
         .collect();
@@ -4360,10 +4357,7 @@ fn merge_chat_schedule_updates(
     merged
 }
 
-fn scheduled_tasks_equivalent(
-    a: &[daily_loop::ScheduledTask],
-    b: &[daily_loop::ScheduledTask],
-) -> bool {
+fn scheduled_tasks_equivalent(a: &[agenda::ScheduledTask], b: &[agenda::ScheduledTask]) -> bool {
     a.len() == b.len()
         && a.iter().zip(b).all(|(left, right)| {
             left.task_id == right.task_id
@@ -6056,12 +6050,8 @@ fn apply_assistant_roadmap_update(
 mod tests {
     use super::*;
 
-    fn scheduled(
-        task_id: &str,
-        start_time: &str,
-        duration_minutes: i32,
-    ) -> daily_loop::ScheduledTask {
-        daily_loop::ScheduledTask {
+    fn scheduled(task_id: &str, start_time: &str, duration_minutes: i32) -> agenda::ScheduledTask {
+        agenda::ScheduledTask {
             id: format!("scheduled_{task_id}"),
             task_id: task_id.to_string(),
             title: task_id.trim_start_matches("task_").replace('_', " "),
@@ -6072,8 +6062,8 @@ mod tests {
         }
     }
 
-    fn outcome(id: &str, title: &str, linked_task_ids: &[&str]) -> daily_loop::Outcome {
-        daily_loop::Outcome {
+    fn outcome(id: &str, title: &str, linked_task_ids: &[&str]) -> agenda::Outcome {
+        agenda::Outcome {
             id: id.to_string(),
             daily_plan_id: "plan_today".to_string(),
             title: title.to_string(),
@@ -6117,8 +6107,8 @@ mod tests {
     #[test]
     fn hosted_ai_preserves_goalrate_route_model_ids() {
         assert_eq!(
-            hosted_ai_route_model_id("goalrate::daily-loop-high-quality"),
-            "goalrate::daily-loop-high-quality"
+            hosted_ai_route_model_id("goalrate::agenda-high-quality"),
+            "goalrate::agenda-high-quality"
         );
     }
 
@@ -6126,7 +6116,7 @@ mod tests {
     fn hosted_ai_uses_backfill_for_unavailable_models_without_bypassing_limits() {
         assert!(hosted_ai_model_unavailable(
             reqwest::StatusCode::UNPROCESSABLE_ENTITY,
-            r#"{"message":"model goalrate::daily-loop-balanced is unavailable"}"#,
+            r#"{"message":"model goalrate::agenda-balanced is unavailable"}"#,
         ));
         assert!(!hosted_ai_model_unavailable(
             reqwest::StatusCode::TOO_MANY_REQUESTS,
@@ -6316,7 +6306,7 @@ mod tests {
         assert!(error_log.contains("goals/goal_context.md"));
         assert!(error_log.contains("tasks[0].subtasks[1].title"));
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6453,7 +6443,7 @@ mod tests {
         assert!(!following_day_ids.contains(&"task_today"));
         assert!(!following_day_ids.contains(&"subtask_exact_child"));
 
-        DAILY_LOOP_DBS.lock().unwrap().remove(&vault_id);
+        AGENDA_DBS.lock().unwrap().remove(&vault_id);
         std::fs::remove_dir_all(vault_root).ok();
     }
 
@@ -6634,7 +6624,7 @@ mod tests {
         light.title = "Put light clothes in the washer".into();
         let mut afternoon = scheduled("task_fold_light_clothes", "1:30 PM", 45);
         afternoon.title = "Fold and put away light clothes".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -6705,7 +6695,7 @@ mod tests {
         breakfast.title = "Eat breakfast with Eleanor".into();
         let mut dryer = scheduled("task_move_dark_clothes_to_dryer", "9:45 AM", 45);
         dryer.title = "Move dark clothes to the dryer".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -6762,7 +6752,7 @@ mod tests {
         duplicate_breakfast.title = "Eat breakfast with Eleanor".into();
         let mut dryer = scheduled("task_move_dark_clothes_to_dryer", "9:45 AM", 45);
         dryer.title = "Move dark clothes to the dryer".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -6828,7 +6818,7 @@ mod tests {
         do_hair.title = "Do hair".into();
         let mut dryer = scheduled("task_move_dark_clothes_to_dryer", "10:30 AM", 45);
         dryer.title = "Move dark clothes to the dryer".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -6883,7 +6873,7 @@ mod tests {
         breakfast.title = "Eat breakfast with Eleanor".into();
         let mut duplicate_breakfast = scheduled("task_eat_breakfast_with_eleanor", "4:00 PM", 30);
         duplicate_breakfast.title = "Eat breakfast with Eleanor".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -6938,7 +6928,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(9, 0, 0)
             .unwrap();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -7472,7 +7462,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(9, 0, 0)
             .unwrap();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -7517,7 +7507,7 @@ mod tests {
         fold.title = "Fold and put away white clothes".into();
         let mut washer = scheduled("task_put_white_in_washer", "9:20 AM", 5);
         washer.title = "Put white clothes in washer".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -7569,7 +7559,7 @@ mod tests {
         put_light.title = "Put light clothes in washer".into();
         let mut fold_white = scheduled("task_fold_white_clothes", "9:50 AM", 15);
         fold_white.title = "Fold and put away white clothes".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -7621,7 +7611,7 @@ mod tests {
         move_light.title = "Move light clothes to dryer".into();
         let mut move_white = scheduled("task_move_white_to_dryer", "9:20 AM", 5);
         move_white.title = "Move white clothes to dryer".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -7791,7 +7781,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(9, 0, 0)
             .unwrap();
-        let mut plan = daily_loop::DailyPlan {
+        let mut plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -7841,7 +7831,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(9, 0, 0)
             .unwrap();
-        let mut plan = daily_loop::DailyPlan {
+        let mut plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -7890,7 +7880,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(9, 0, 0)
             .unwrap();
-        let mut plan = daily_loop::DailyPlan {
+        let mut plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: vec!["out_old".into(), "out_launch".into()],
@@ -7974,7 +7964,7 @@ mod tests {
         breakfast.title = "Eat breakfast".into();
         let mut focus = scheduled("task_focus", "9:00 AM", 60);
         focus.title = "Focus block".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -8018,7 +8008,7 @@ mod tests {
         snack.title = "Snack".into();
         let mut dinner = scheduled("task_dinner", "7:30 PM", 60);
         dinner.title = "Dinner".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 30).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -8076,7 +8066,7 @@ mod tests {
             .unwrap();
         let mut dinner = scheduled("task_dinner", "7:30 PM", 60);
         dinner.title = "Dinner".into();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 30).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -8111,7 +8101,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(8, 0, 0)
             .unwrap();
-        let plan = daily_loop::DailyPlan {
+        let plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -8170,7 +8160,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(9, 0, 0)
             .unwrap();
-        let mut plan = daily_loop::DailyPlan {
+        let mut plan = agenda::DailyPlan {
             id: "plan_today".into(),
             date: NaiveDate::from_ymd_opt(2026, 4, 26).unwrap(),
             top_3_outcome_ids: Vec::new(),
@@ -8208,7 +8198,7 @@ mod tests {
 }
 
 #[tauri::command]
-pub async fn daily_loop_generate_plan(
+pub async fn agenda_generate_plan(
     vault_id: String,
     model_id: String,
     date: String,
@@ -8937,7 +8927,7 @@ Rules:
 }
 
 #[tauri::command]
-pub async fn daily_loop_chat_reprioritize(
+pub async fn agenda_chat_reprioritize(
     vault_id: String,
     plan_id: String,
     model_id: String,
@@ -9468,7 +9458,7 @@ pub async fn daily_loop_chat_reprioritize(
 
                 // Get the current task order so we can merge
                 let current_order = current_plan.task_order.clone();
-                let mut removed_scheduled_tasks: Option<Vec<daily_loop::ScheduledTask>> = None;
+                let mut removed_scheduled_tasks: Option<Vec<agenda::ScheduledTask>> = None;
 
                 // Apply the action
                 let final_order = match action {
@@ -10008,7 +9998,7 @@ pub async fn daily_loop_chat_reprioritize(
 }
 
 #[tauri::command]
-pub async fn daily_loop_generate_summary(
+pub async fn agenda_generate_summary(
     vault_id: String,
     model_id: String,
     date: String,

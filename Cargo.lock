@@ -6,8 +6,8 @@ version = 3
 name = "GoalRate"
 version = "0.1.3"
 dependencies = [
+ "agenda",
  "chrono",
- "daily-loop",
  "dirs 5.0.1",
  "focus-engine",
  "goalrate-crypto",
@@ -50,6 +50,20 @@ checksum = "d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0"
 dependencies = [
  "crypto-common",
  "generic-array",
+]
+
+[[package]]
+name = "agenda"
+version = "0.1.3"
+dependencies = [
+ "chrono",
+ "log",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "uuid",
 ]
 
 [[package]]
@@ -620,20 +634,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "daily-loop"
-version = "0.1.3"
-dependencies = [
- "chrono",
- "log",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "uuid",
 ]
 
 [[package]]

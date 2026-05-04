@@ -1,11 +1,11 @@
-//! Error types for daily loop operations
+//! Error types for agenda operations
 
 use thiserror::Error;
 
-pub type DailyLoopResult<T> = Result<T, DailyLoopError>;
+pub type AgendaResult<T> = Result<T, AgendaError>;
 
 #[derive(Error, Debug)]
-pub enum DailyLoopError {
+pub enum AgendaError {
     #[error("Database error: {0}")]
     Database(#[from] rusqlite::Error),
 

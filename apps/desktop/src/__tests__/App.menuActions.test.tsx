@@ -44,8 +44,8 @@ vi.mock("../components/QuickCaptureDialog", () => ({
   QuickCaptureDialog: () => null,
 }));
 
-vi.mock("../pages/DailyLoopApp", () => ({
-  DailyLoopApp: () => <div>Daily Loop</div>,
+vi.mock("../pages/AgendaApp", () => ({
+  AgendaApp: () => <div>Agenda</div>,
 }));
 
 describe("App native menu actions", () => {
@@ -61,7 +61,7 @@ describe("App native menu actions", () => {
 
     render(<App />);
 
-    expect(await screen.findByText("Daily Loop")).toBeInTheDocument();
+    expect(await screen.findByText("Agenda")).toBeInTheDocument();
     await waitFor(() => {
       expect(listen).toHaveBeenCalledWith("menu-action", expect.any(Function));
     });

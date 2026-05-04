@@ -1,6 +1,6 @@
 //! Native menu implementation for GoalRate desktop application.
 //!
-//! Simplified for the Daily Loop app — no Focus/Goals/Projects navigation.
+//! Simplified for the Agenda app — no Focus/Goals/Projects navigation.
 
 use tauri::{
     menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder},

@@ -4,11 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Goal, Task } from "../../domain";
 import { evaluateMissedWork, type MissedWorkDecision } from "../../domain";
 import { useVault } from "../../context/VaultContext";
-import type { UseDailyLoopReturn } from "../../hooks/useDailyLoop";
-import * as dailyLoopIpc from "../../lib/dailyLoopIpc";
+import type { UseAgendaReturn } from "../../hooks/useAgenda";
+import * as agendaIpc from "../../lib/agendaIpc";
 
 interface AssistantMissedWorkProps {
-  dailyLoop: UseDailyLoopReturn;
+  agenda: UseAgendaReturn;
 }
 
 interface GoalIpc {
@@ -250,7 +250,7 @@ function nextDate(date: string): string {
 }
 
 export function AssistantMissedWork({
-  dailyLoop,
+  agenda,
 }: AssistantMissedWorkProps): React.ReactElement | null {
   const { currentVault } = useVault();
   const vaultId = currentVault?.id ?? "";
@@ -276,7 +276,7 @@ export function AssistantMissedWork({
       try {
         const goals = await loadMissedWorkGoals(vaultId);
         const nextDecisions = evaluateMissedWork(goals, {
-          today: dailyLoop.date,
+          today: agenda.date,
         });
         if (!cancelled) {
           setDecisions(nextDecisions);
@@ -297,7 +297,7 @@ export function AssistantMissedWork({
     return () => {
       cancelled = true;
     };
-  }, [vaultId, dailyLoop.date, dailyLoop.dataVersion]);
+  }, [vaultId, agenda.date, agenda.dataVersion]);
 
   const sendDecision = useCallback(
     async (
@@ -311,50 +311,50 @@ export function AssistantMissedWork({
         | "archive_parent_task"
         | "archive_goal",
     ) => {
-      if (!dailyLoop.plan || pendingTaskId) {
+      if (!agenda.plan || pendingTaskId) {
         return;
       }
       setActionError(null);
       setPendingTaskId(decision.taskId);
       try {
         if (action === "continue_subtask") {
-          await dailyLoopIpc.scheduleTaskForDate({
+          await agendaIpc.scheduleTaskForDate({
             vaultId,
             taskId: decision.taskId,
             title: decision.title,
-            date: nextDate(dailyLoop.date),
+            date: nextDate(agenda.date),
             estimateSource: "manual",
           });
           setDecisions((current) =>
             current.filter((item) => item.taskId !== decision.taskId),
           );
         } else if (action === "different_subtask") {
-          await dailyLoopIpc.generateAlternativeSubtask({
+          await agendaIpc.generateAlternativeSubtask({
             vaultId,
             missedTaskId: decision.taskId,
             parentTaskId: decision.parentTaskId,
             missedTitle: decision.title,
-            date: nextDate(dailyLoop.date),
+            date: nextDate(agenda.date),
           });
           setDecisions((current) =>
             current.filter((item) => item.taskId !== decision.taskId),
           );
         } else if (action === "reconsider_parent") {
-          await dailyLoopIpc.scheduleParentTaskForMissedSubtask({
+          await agendaIpc.scheduleParentTaskForMissedSubtask({
             vaultId,
             missedTaskId: decision.taskId,
             parentTaskId: decision.parentTaskId,
-            date: nextDate(dailyLoop.date),
+            date: nextDate(agenda.date),
           });
           setDecisions((current) =>
             current.filter((item) => item.taskId !== decision.taskId),
           );
         } else if (action === "different_task") {
-          await dailyLoopIpc.generateAlternativeTask({
+          await agendaIpc.generateAlternativeTask({
             vaultId,
             missedTaskId: decision.taskId,
             parentTaskId: decision.parentTaskId,
-            date: nextDate(dailyLoop.date),
+            date: nextDate(agenda.date),
           });
           setDecisions((current) =>
             current.filter((item) => item.taskId !== decision.taskId),
@@ -362,11 +362,11 @@ export function AssistantMissedWork({
           setConfirmingTaskId(null);
           setConfirmingGoalArchiveTaskId(null);
         } else if (action === "archive_parent_task") {
-          await dailyLoopIpc.archiveParentTaskForMissedSubtask({
+          await agendaIpc.archiveParentTaskForMissedSubtask({
             vaultId,
             missedTaskId: decision.taskId,
             parentTaskId: decision.parentTaskId,
-            date: nextDate(dailyLoop.date),
+            date: nextDate(agenda.date),
           });
           setDecisions((current) =>
             current.filter((item) => item.taskId !== decision.taskId),
@@ -374,11 +374,11 @@ export function AssistantMissedWork({
           setConfirmingTaskId(null);
           setConfirmingGoalArchiveTaskId(null);
         } else if (action === "archive_goal") {
-          await dailyLoopIpc.archiveGoalForMissedSubtask({
+          await agendaIpc.archiveGoalForMissedSubtask({
             vaultId,
             missedTaskId: decision.taskId,
             parentTaskId: decision.parentTaskId,
-            date: nextDate(dailyLoop.date),
+            date: nextDate(agenda.date),
           });
           setDecisions((current) =>
             current.filter((item) => item.taskId !== decision.taskId),
@@ -386,16 +386,16 @@ export function AssistantMissedWork({
           setConfirmingTaskId(null);
           setConfirmingGoalArchiveTaskId(null);
         } else {
-          await dailyLoop.sendChat(promptForDecision(decision, action));
+          await agenda.sendChat(promptForDecision(decision, action));
         }
-        await dailyLoop.refresh();
+        await agenda.refresh();
       } catch (err) {
         setActionError(extractErrorMessage(err));
       } finally {
         setPendingTaskId(null);
       }
     },
-    [dailyLoop, pendingTaskId, vaultId],
+    [agenda, pendingTaskId, vaultId],
   );
 
   const showLoadingState = isLoading && (decisions.length > 0 || !!loadError);
@@ -455,7 +455,7 @@ export function AssistantMissedWork({
               <button
                 type="button"
                 onClick={() => void sendDecision(decision, "break_down")}
-                disabled={!dailyLoop.plan || pendingTaskId === decision.taskId}
+                disabled={!agenda.plan || pendingTaskId === decision.taskId}
                 className="rounded-md border border-border px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-50"
                 aria-label={`Ask Assistant to break down "${decision.title}"`}
               >
@@ -469,7 +469,7 @@ export function AssistantMissedWork({
                     void sendDecision(decision, "continue_subtask")
                   }
                   disabled={
-                    !dailyLoop.plan || pendingTaskId === decision.taskId
+                    !agenda.plan || pendingTaskId === decision.taskId
                   }
                   className="rounded-md border border-border px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-50"
                   aria-label={`Continue Subtask "${decision.title}"`}
@@ -482,7 +482,7 @@ export function AssistantMissedWork({
                     void sendDecision(decision, "different_subtask")
                   }
                   disabled={
-                    !dailyLoop.plan || pendingTaskId === decision.taskId
+                    !agenda.plan || pendingTaskId === decision.taskId
                   }
                   className="rounded-md border border-border px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-50"
                   aria-label={`Try a different Subtask for "${decision.title}"`}
@@ -495,7 +495,7 @@ export function AssistantMissedWork({
                     void sendDecision(decision, "reconsider_parent")
                   }
                   disabled={
-                    !dailyLoop.plan || pendingTaskId === decision.taskId
+                    !agenda.plan || pendingTaskId === decision.taskId
                   }
                   className="rounded-md border border-border px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-50"
                   aria-label={`Reconsider parent Task for "${decision.title}"`}
@@ -506,7 +506,7 @@ export function AssistantMissedWork({
                   type="button"
                   onClick={() => void sendDecision(decision, "different_task")}
                   disabled={
-                    !dailyLoop.plan || pendingTaskId === decision.taskId
+                    !agenda.plan || pendingTaskId === decision.taskId
                   }
                   className="rounded-md border border-border px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-50"
                   aria-label={`Try a different Task for "${decision.title}"`}
@@ -520,7 +520,7 @@ export function AssistantMissedWork({
                     setConfirmingGoalArchiveTaskId(null);
                   }}
                   disabled={
-                    !dailyLoop.plan || pendingTaskId === decision.taskId
+                    !agenda.plan || pendingTaskId === decision.taskId
                   }
                   className="rounded-md border border-border px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-50"
                   aria-label={`Continue Goal for "${decision.title}"`}
@@ -534,7 +534,7 @@ export function AssistantMissedWork({
                     setConfirmingTaskId(null);
                   }}
                   disabled={
-                    !dailyLoop.plan || pendingTaskId === decision.taskId
+                    !agenda.plan || pendingTaskId === decision.taskId
                   }
                   className="rounded-md border border-border px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-50"
                   aria-label={`Archive Goal for "${decision.title}"`}
@@ -560,7 +560,7 @@ export function AssistantMissedWork({
                         void sendDecision(decision, "archive_parent_task")
                       }
                       disabled={
-                        !dailyLoop.plan || pendingTaskId === decision.taskId
+                        !agenda.plan || pendingTaskId === decision.taskId
                       }
                       className="rounded-md border border-progress-mid px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-50"
                       aria-label={`Confirm archiving parent Task for "${decision.title}"`}
@@ -599,7 +599,7 @@ export function AssistantMissedWork({
                         void sendDecision(decision, "archive_goal")
                       }
                       disabled={
-                        !dailyLoop.plan || pendingTaskId === decision.taskId
+                        !agenda.plan || pendingTaskId === decision.taskId
                       }
                       className="rounded-md border border-semantic-error px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-50"
                       aria-label={`Confirm archiving Goal for "${decision.title}"`}

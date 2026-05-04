@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UseDailyLoopReturn } from "../../../hooks/useDailyLoop";
+import type { UseAgendaReturn } from "../../../hooks/useAgenda";
 import { PlanGenerateButton } from "../PlanGenerateButton";
-import * as dailyLoopIpc from "../../../lib/dailyLoopIpc";
+import * as agendaIpc from "../../../lib/agendaIpc";
 
 const subscriptionState = vi.hoisted(() => ({
   allowsAi: false,
@@ -53,15 +53,15 @@ vi.mock("../../../context/SubscriptionContext", () => ({
   }),
 }));
 
-vi.mock("../../../lib/dailyLoopIpc", async (importOriginal) => {
-  const actual = await importOriginal<typeof dailyLoopIpc>();
+vi.mock("../../../lib/agendaIpc", async (importOriginal) => {
+  const actual = await importOriginal<typeof agendaIpc>();
   return {
     ...actual,
     generatePlan: vi.fn(),
   };
 });
 
-function dailyLoop(): UseDailyLoopReturn {
+function agenda(): UseAgendaReturn {
   return {
     date: "2026-04-28",
     plan: null,
@@ -99,8 +99,8 @@ describe("PlanGenerateButton subscription gating", () => {
   });
 
   it("creates a local Agenda on Free without calling AI", async () => {
-    const loop = dailyLoop();
-    render(<PlanGenerateButton dailyLoop={loop} />);
+    const loop = agenda();
+    render(<PlanGenerateButton agenda={loop} />);
 
     expect(
       screen.getByText("Upgrade to GoalRate Plus for AI planning."),
@@ -110,13 +110,13 @@ describe("PlanGenerateButton subscription gating", () => {
     await waitFor(() => {
       expect(loop.createPlan).toHaveBeenCalledTimes(1);
     });
-    expect(dailyLoopIpc.generatePlan).not.toHaveBeenCalled();
+    expect(agendaIpc.generatePlan).not.toHaveBeenCalled();
   });
 
   it("generates an AI Agenda when Plus is active", async () => {
     subscriptionState.allowsAi = true;
-    const loop = dailyLoop();
-    vi.mocked(dailyLoopIpc.generatePlan).mockResolvedValue({
+    const loop = agenda();
+    vi.mocked(agendaIpc.generatePlan).mockResolvedValue({
       plan: {} as never,
       outcomes: [],
       dailyInsight: null,
@@ -125,13 +125,13 @@ describe("PlanGenerateButton subscription gating", () => {
       taskTitles: {},
     });
 
-    render(<PlanGenerateButton dailyLoop={loop} />);
+    render(<PlanGenerateButton agenda={loop} />);
     fireEvent.click(screen.getByRole("button", { name: "Generate Agenda" }));
 
     await waitFor(() => {
-      expect(dailyLoopIpc.generatePlan).toHaveBeenCalledWith(
+      expect(agendaIpc.generatePlan).toHaveBeenCalledWith(
         "vault_test",
-        dailyLoopIpc.DEFAULT_AI_MODEL,
+        agendaIpc.DEFAULT_AI_MODEL,
         "2026-04-28",
       );
     });

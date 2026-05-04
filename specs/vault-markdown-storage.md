@@ -57,7 +57,7 @@ Target v1 vault structure:
   .goalrate/
     .gitignore
     index.db
-    daily-loop.db
+    agenda.db
     cache/
 ```
 
@@ -221,7 +221,7 @@ See [Agenda Daily Planning](agenda-daily-planning.md) for exact behavior.
 
 - Current vault code already uses `.vault.json`, `.goalrate/`, and `goals/`.
 - Current implementation supports flat goal markdown files and some legacy directory-style goal files.
-- Current daily planning state is stored in `.goalrate/daily-loop.db`; target behavior moves daily Agenda source-of-truth state to `agenda/<yyyy-mm-dd>.md` while any internal DB remains a derived index/cache.
+- Current daily planning state is stored in `.goalrate/agenda.db`; target behavior moves daily Agenda source-of-truth state to `agenda/<yyyy-mm-dd>.md` while any internal DB remains a derived index/cache.
 - Current implementation may refer to vault type values such as private, public, and team. This spec only requires local private vault behavior.
 
 ## Acceptance Criteria

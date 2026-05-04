@@ -32,7 +32,7 @@ import {
   X,
 } from "lucide-react";
 import type { DailyStats, ScheduledTask } from "@goalrate-app/shared";
-import type { UseDailyLoopReturn } from "../../hooks/useDailyLoop";
+import type { UseAgendaReturn } from "../../hooks/useAgenda";
 import { OutcomeCard } from "./OutcomeCard";
 import { TaskRow, type TaskRowEdit } from "./TaskRow";
 import { PlanGenerateButton } from "./PlanGenerateButton";
@@ -211,7 +211,7 @@ interface SortableAgendaTaskRowProps {
   task: AgendaTaskRow;
   planId: string;
   completedTasks: ReadonlySet<string>;
-  dailyLoop: UseDailyLoopReturn;
+  agenda: UseAgendaReturn;
   onEdit: (edit: TaskRowEdit) => void;
   onRemove: (taskId: string) => void;
   onOpenGoalNotes?: (goalId: string, title: string) => void;
@@ -222,7 +222,7 @@ function SortableAgendaTaskRow({
   task,
   planId,
   completedTasks,
-  dailyLoop,
+  agenda,
   onEdit,
   onRemove,
   onOpenGoalNotes,
@@ -261,7 +261,7 @@ function SortableAgendaTaskRow({
       <GripVertical className="h-3.5 w-3.5" />
     </button>
   );
-  const goalMetadata = dailyLoop.taskMetadata[task.taskId];
+  const goalMetadata = agenda.taskMetadata[task.taskId];
   const eisenhowerQuadrant =
     task.eisenhowerQuadrant ?? goalMetadata?.eisenhowerQuadrant ?? null;
   const openGoalNotes =
@@ -287,10 +287,10 @@ function SortableAgendaTaskRow({
         eisenhowerQuadrant={eisenhowerQuadrant}
         isCompleted={completedTasks.has(task.taskId)}
         onComplete={() => {
-          void dailyLoop.toggleTaskCompletion(planId, task.taskId);
+          void agenda.toggleTaskCompletion(planId, task.taskId);
         }}
         onDefer={() => {
-          void dailyLoop.deferTask(task.taskId);
+          void agenda.deferTask(task.taskId);
         }}
         onEdit={onEdit}
         onRemove={() => onRemove(task.taskId)}
@@ -304,12 +304,12 @@ function SortableAgendaTaskRow({
 // ── Main Component ────────────────────────────────────────────
 
 interface TodaysPlanProps {
-  dailyLoop: UseDailyLoopReturn;
+  agenda: UseAgendaReturn;
   onOpenGoalNotes?: (goalId: string, title: string) => void;
 }
 
 export function TodaysPlan({
-  dailyLoop,
+  agenda,
   onOpenGoalNotes,
 }: TodaysPlanProps): React.ReactElement {
   const {
@@ -322,7 +322,7 @@ export function TodaysPlan({
     checkIn,
     taskTitles,
     recentStats,
-  } = dailyLoop;
+  } = agenda;
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -378,7 +378,7 @@ export function TodaysPlan({
         startTime: null,
         durationMinutes: null,
         eisenhowerQuadrant:
-          dailyLoop.taskMetadata[taskId]?.eisenhowerQuadrant ?? null,
+          agenda.taskMetadata[taskId]?.eisenhowerQuadrant ?? null,
       }));
 
   const pushUndoSnapshot = (rows: AgendaTaskRow[]): void => {
@@ -405,7 +405,7 @@ export function TodaysPlan({
     if (options.captureUndo !== false) {
       pushUndoSnapshot(taskRows);
     }
-    await dailyLoop.updateScheduledTasks(rows.map(scheduledTaskFromRow));
+    await agenda.updateScheduledTasks(rows.map(scheduledTaskFromRow));
   };
 
   const undoLastAgendaEdit = (): void => {
@@ -603,7 +603,7 @@ export function TodaysPlan({
               <button
                 type="button"
                 onClick={() => {
-                  void dailyLoop.openAgendaErrorLog();
+                  void agenda.openAgendaErrorLog();
                 }}
                 className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-progress-low/30 px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm hover:text-text-primary focus:outline-none focus:ring-2 focus:ring-progress-low/40"
               >
@@ -616,7 +616,7 @@ export function TodaysPlan({
       )}
 
       {/* No plan state */}
-      {!plan && <PlanGenerateButton dailyLoop={dailyLoop} />}
+      {!plan && <PlanGenerateButton agenda={agenda} />}
 
       {/* Plan content */}
       {plan && (
@@ -731,7 +731,7 @@ export function TodaysPlan({
                         task={task}
                         planId={plan.id}
                         completedTasks={completedTasks}
-                        dailyLoop={dailyLoop}
+                        agenda={agenda}
                         onEdit={editTaskRow}
                         onRemove={removeTaskRow}
                         onOpenGoalNotes={onOpenGoalNotes}
@@ -751,7 +751,7 @@ export function TodaysPlan({
       )}
 
       <CheckInDialog
-        dailyLoop={dailyLoop}
+        agenda={agenda}
         completedTasks={completedTasks}
         open={showCheckIn}
         onClose={() => setShowCheckIn(false)}

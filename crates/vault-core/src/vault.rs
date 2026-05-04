@@ -850,7 +850,7 @@ impl VaultManager {
         let gitignore_path = structure.goalrate_dir.join(".gitignore");
         std::fs::write(
             &gitignore_path,
-            "# App-managed local indexes and caches\nindex.db\nindex.db-*\ndaily-loop.db\ndaily-loop.db-*\ncache/\n",
+            "# App-managed local indexes and caches\nindex.db\nindex.db-*\nagenda.db\nagenda.db-*\ncache/\n",
         )?;
 
         let manager = Self { structure, config };
@@ -899,12 +899,12 @@ impl VaultManager {
         if !gitignore_path.exists() {
             std::fs::write(
                 &gitignore_path,
-                "# App-managed local indexes and caches\nindex.db\nindex.db-*\ndaily-loop.db\ndaily-loop.db-*\ncache/\n",
+                "# App-managed local indexes and caches\nindex.db\nindex.db-*\nagenda.db\nagenda.db-*\ncache/\n",
             )?;
         } else {
             let mut gitignore = std::fs::read_to_string(&gitignore_path)?;
             let mut changed = false;
-            for line in ["daily-loop.db", "daily-loop.db-*", "cache/"] {
+            for line in ["agenda.db", "agenda.db-*", "cache/"] {
                 if !gitignore.lines().any(|existing| existing.trim() == line) {
                     if !gitignore.ends_with('\n') {
                         gitignore.push('\n');

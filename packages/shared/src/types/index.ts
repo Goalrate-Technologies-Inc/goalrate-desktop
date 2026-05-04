@@ -33,7 +33,7 @@ export {
   getNextStatus,
 } from "./common";
 
-// Daily Loop types
+// Agenda types
 export type {
   ScheduledTask,
   DailyPlan,
@@ -52,16 +52,16 @@ export type {
   DeferTaskInput,
   CreateCheckInInput,
   SendChatInput,
-  DailyLoopIpcCommandName,
-} from "./daily-loop";
+  AgendaIpcCommandName,
+} from "./agenda";
 
-export { DAILY_LOOP_IPC_COMMANDS, DAILY_LOOP_AI_COMMANDS } from "./daily-loop";
+export { AGENDA_IPC_COMMANDS, AGENDA_AI_COMMANDS } from "./agenda";
 
 export type {
   DeferralConfrontation,
   GeneratedPlanResponse,
   ChatReprioritizeResponse,
-} from "./daily-loop";
+} from "./agenda";
 
 // User types
 export type {

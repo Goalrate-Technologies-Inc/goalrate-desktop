@@ -61,7 +61,7 @@ Stripe price IDs are not secrets, but they are environment-specific billing conf
 
 The existing product direction supports a freemium local core:
 
-- `README.md` describes GoalRate as an offline-first desktop app with a local markdown vault and an AI-driven daily loop.
+- `README.md` describes GoalRate as an offline-first desktop app with a local markdown vault and an AI-driven agenda.
 - `GOALRATE_DESKTOP_PRD.md` positions paid upgrades around AI, sync, publishing, and collaboration.
 - [subscription-tiers.md](subscription-tiers.md) already defines the tier order and feature steps.
 - [desktop-app-overview.md](desktop-app-overview.md) keeps the desktop app local-first and markdown-first.
@@ -71,8 +71,8 @@ The existing product direction supports a freemium local core:
 The current implementation also creates an important monetization choice:
 
 - The desktop app currently contains OpenAI and Anthropic keychain integrations, but the target monetization strategy should remove BYO API key UX before paid AI launch.
-- `apps/desktop/src/lib/dailyLoopIpc.ts` currently defaults AI calls to an Anthropic Sonnet model.
-- `crates/daily-loop/src/context.rs` allows up to 15,000 estimated context tokens for Agenda generation.
+- `apps/desktop/src/lib/agendaIpc.ts` currently defaults AI calls to an Anthropic Sonnet model.
+- `crates/agenda/src/context.rs` allows up to 15,000 estimated context tokens for Agenda generation.
 
 That means a hosted Plus plan needs routing, limits, or credits before launch. If GoalRate simply absorbs all Sonnet usage inside a flat subscription, heavy users can become margin-negative.
 
@@ -295,7 +295,7 @@ Goal: launch the main Mac app from the GoalRate website with Stripe billing befo
 
 ### Phase 1: Free Publishing + Paid AI, Direct Billing
 
-Goal: validate the website growth loop and willingness to pay for the core AI daily loop.
+Goal: validate the website growth loop and willingness to pay for the core AI agenda.
 
 - Launch Free and Plus only.
 - Include basic publishing in Free and Plus.

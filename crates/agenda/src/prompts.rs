@@ -1,4 +1,4 @@
-//! AI prompt templates for daily loop plan generation and chat
+//! AI prompt templates for agenda plan generation and chat
 
 /// Threshold: tasks deferred this many times trigger AI confrontation
 pub const DEFERRAL_CONFRONTATION_THRESHOLD: i32 = 3;

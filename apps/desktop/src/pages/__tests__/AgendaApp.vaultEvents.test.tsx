@@ -3,10 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setupTauriEventMock } from "../../test/utils/mockTauri";
-import { DailyLoopApp } from "../DailyLoopApp";
+import { AgendaApp } from "../AgendaApp";
 
-vi.mock("../../hooks/useDailyLoop", () => ({
-  useDailyLoop: () => ({
+vi.mock("../../hooks/useAgenda", () => ({
+  useAgenda: () => ({
     dataVersion: 0,
     refresh: vi.fn().mockResolvedValue(undefined),
   }),
@@ -28,27 +28,27 @@ vi.mock("../../context/VaultContext", () => ({
   }),
 }));
 
-vi.mock("../daily-loop/DomainSidebar", () => ({
+vi.mock("../agenda/DomainSidebar", () => ({
   DomainSidebar: () => <div>Roadmap panel</div>,
 }));
 
-vi.mock("../daily-loop/TodaysPlan", () => ({
+vi.mock("../agenda/TodaysPlan", () => ({
   TodaysPlan: () => <div>Agenda panel</div>,
 }));
 
-vi.mock("../daily-loop/AiChatPanel", () => ({
+vi.mock("../agenda/AiChatPanel", () => ({
   AiChatPanel: () => <div>Assistant panel</div>,
 }));
 
-vi.mock("../daily-loop/IntakeFlow", () => ({
+vi.mock("../agenda/IntakeFlow", () => ({
   IntakeFlow: () => <div>Intake flow</div>,
 }));
 
-vi.mock("../daily-loop/SettingsPanel", () => ({
+vi.mock("../agenda/SettingsPanel", () => ({
   SettingsPanel: () => <div>Settings panel</div>,
 }));
 
-describe("DailyLoopApp vault events", () => {
+describe("AgendaApp vault events", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listen).mockResolvedValue(() => {});
@@ -64,7 +64,7 @@ describe("DailyLoopApp vault events", () => {
   it("shows a transient local refresh status for active-vault changes", async () => {
     const eventMock = setupTauriEventMock(vi.mocked(listen), vi.mocked(emit));
 
-    render(<DailyLoopApp />);
+    render(<AgendaApp />);
 
     expect(await screen.findByText("Roadmap panel")).toBeInTheDocument();
     await waitFor(() => {
@@ -108,7 +108,7 @@ describe("DailyLoopApp vault events", () => {
   it("uses a broad local refresh status when changed paths span areas", async () => {
     const eventMock = setupTauriEventMock(vi.mocked(listen), vi.mocked(emit));
 
-    render(<DailyLoopApp />);
+    render(<AgendaApp />);
 
     expect(await screen.findByText("Roadmap panel")).toBeInTheDocument();
     await waitFor(() => {

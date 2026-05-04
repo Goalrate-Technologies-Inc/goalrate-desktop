@@ -1,4 +1,4 @@
-//! Database manager for the daily loop feature
+//! Database manager for the agenda feature
 
 use std::path::Path;
 
@@ -6,10 +6,10 @@ use chrono::{NaiveDate, NaiveDateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
 
-use crate::error::{DailyLoopError, DailyLoopResult};
+use crate::error::{AgendaError, AgendaResult};
 use crate::models::*;
 
-/// Schema SQL for creating the daily loop database
+/// Schema SQL for creating the agenda database
 const SCHEMA_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS daily_plans (
     id TEXT PRIMARY KEY,
@@ -129,14 +129,14 @@ fn parse_date(s: &str) -> NaiveDate {
         .unwrap_or(NaiveDate::from_ymd_opt(2000, 1, 1).unwrap())
 }
 
-/// Manager for the daily loop SQLite database
-pub struct DailyLoopDb {
+/// Manager for the agenda SQLite database
+pub struct AgendaDb {
     conn: Connection,
 }
 
-impl DailyLoopDb {
-    /// Open or create a daily loop database at the specified path
-    pub fn open(path: impl AsRef<Path>) -> DailyLoopResult<Self> {
+impl AgendaDb {
+    /// Open or create an agenda database at the specified path
+    pub fn open(path: impl AsRef<Path>) -> AgendaResult<Self> {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         let db = Self { conn };
@@ -145,7 +145,7 @@ impl DailyLoopDb {
     }
 
     /// Open an in-memory database (for testing)
-    pub fn open_in_memory() -> DailyLoopResult<Self> {
+    pub fn open_in_memory() -> AgendaResult<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         let db = Self { conn };
@@ -153,10 +153,10 @@ impl DailyLoopDb {
         Ok(db)
     }
 
-    fn migrate(&self) -> DailyLoopResult<()> {
+    fn migrate(&self) -> AgendaResult<()> {
         self.conn
             .execute_batch(SCHEMA_SQL)
-            .map_err(|e| DailyLoopError::Migration(e.to_string()))?;
+            .map_err(|e| AgendaError::Migration(e.to_string()))?;
 
         // Migration: add task_titles column to existing daily_plans tables
         let has_task_titles: bool = self
@@ -246,7 +246,7 @@ impl DailyLoopDb {
     // ── DailyPlan ──────────────────────────────────────────────
 
     /// Get plan for a specific date
-    pub fn get_plan_by_date(&self, date: NaiveDate) -> DailyLoopResult<Option<DailyPlan>> {
+    pub fn get_plan_by_date(&self, date: NaiveDate) -> AgendaResult<Option<DailyPlan>> {
         self.conn
             .prepare(
                 "SELECT id, date, top_3_outcome_ids, task_order, task_titles, completed_task_ids, generated_at, scheduled_tasks, locked_at, created_at, updated_at
@@ -258,9 +258,9 @@ impl DailyLoopDb {
     }
 
     /// Create a new Agenda index row
-    pub fn create_plan(&self, date: NaiveDate) -> DailyLoopResult<DailyPlan> {
+    pub fn create_plan(&self, date: NaiveDate) -> AgendaResult<DailyPlan> {
         if self.get_plan_by_date(date)?.is_some() {
-            return Err(DailyLoopError::PlanAlreadyExists(date.to_string()));
+            return Err(AgendaError::PlanAlreadyExists(date.to_string()));
         }
 
         let plan = DailyPlan {
@@ -300,7 +300,7 @@ impl DailyLoopDb {
         plan_id: &str,
         top_3_outcome_ids: Option<Vec<String>>,
         task_order: Option<Vec<String>>,
-    ) -> DailyLoopResult<DailyPlan> {
+    ) -> AgendaResult<DailyPlan> {
         let plan = self.get_plan_by_id(plan_id)?;
         // Note: locked_at is set by check-in as a snapshot marker, but we allow
         // edits to continue (user requested always-editable plans). The snapshot
@@ -333,7 +333,7 @@ impl DailyLoopDb {
         &self,
         plan_id: &str,
         titles: &std::collections::HashMap<String, String>,
-    ) -> DailyLoopResult<()> {
+    ) -> AgendaResult<()> {
         if titles.is_empty() {
             return Ok(());
         }
@@ -350,7 +350,7 @@ impl DailyLoopDb {
     }
 
     /// Synchronize the derived plan index from authoritative Agenda markdown.
-    pub fn sync_plan_index_from_markdown(&self, plan: &DailyPlan) -> DailyLoopResult<DailyPlan> {
+    pub fn sync_plan_index_from_markdown(&self, plan: &DailyPlan) -> AgendaResult<DailyPlan> {
         let existing = self.get_plan_by_date(plan.date)?;
         let updated_at = now();
         let locked_at = plan
@@ -427,11 +427,7 @@ impl DailyLoopDb {
     }
 
     /// Toggle a task's completion status on a plan
-    pub fn toggle_task_completion(
-        &self,
-        plan_id: &str,
-        task_id: &str,
-    ) -> DailyLoopResult<DailyPlan> {
+    pub fn toggle_task_completion(&self, plan_id: &str, task_id: &str) -> AgendaResult<DailyPlan> {
         let plan = self.get_plan_by_id(plan_id)?;
         let mut completed = plan.completed_task_ids.clone();
         if let Some(pos) = completed.iter().position(|id| id == task_id) {
@@ -447,7 +443,7 @@ impl DailyLoopDb {
     }
 
     /// Lock a plan (end-of-day)
-    pub fn lock_plan(&self, plan_id: &str) -> DailyLoopResult<DailyPlan> {
+    pub fn lock_plan(&self, plan_id: &str) -> AgendaResult<DailyPlan> {
         let plan = self.get_plan_by_id(plan_id)?;
         let locked = now();
 
@@ -464,7 +460,7 @@ impl DailyLoopDb {
     }
 
     /// Get a plan by its ID
-    pub fn get_plan_by_id(&self, plan_id: &str) -> DailyLoopResult<DailyPlan> {
+    pub fn get_plan_by_id(&self, plan_id: &str) -> AgendaResult<DailyPlan> {
         self.conn
             .query_row(
                 "SELECT id, date, top_3_outcome_ids, task_order, task_titles, completed_task_ids, generated_at, scheduled_tasks, locked_at, created_at, updated_at
@@ -472,7 +468,7 @@ impl DailyLoopDb {
                 params![plan_id],
                 Self::read_plan,
             )
-            .map_err(|_| DailyLoopError::NotFound(format!("Plan {plan_id}")))
+            .map_err(|_| AgendaError::NotFound(format!("Plan {plan_id}")))
     }
 
     // ── Outcomes ───────────────────────────────────────────────
@@ -495,10 +491,10 @@ impl DailyLoopDb {
         title: &str,
         linked_task_ids: Vec<String>,
         ai_generated: bool,
-    ) -> DailyLoopResult<Outcome> {
+    ) -> AgendaResult<Outcome> {
         let plan = self.get_plan_by_id(daily_plan_id)?;
         if plan.locked_at.is_some() {
-            return Err(DailyLoopError::PlanLocked);
+            return Err(AgendaError::PlanLocked);
         }
 
         let outcome = Outcome {
@@ -527,7 +523,7 @@ impl DailyLoopDb {
     }
 
     /// Get all outcomes for an Agenda
-    pub fn get_outcomes_for_plan(&self, daily_plan_id: &str) -> DailyLoopResult<Vec<Outcome>> {
+    pub fn get_outcomes_for_plan(&self, daily_plan_id: &str) -> AgendaResult<Vec<Outcome>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, daily_plan_id, title, linked_task_ids, created_at, ai_generated
              FROM outcomes WHERE daily_plan_id = ?1 ORDER BY created_at ASC",
@@ -544,11 +540,11 @@ impl DailyLoopDb {
         outcome_id: &str,
         title: Option<&str>,
         linked_task_ids: Option<Vec<String>>,
-    ) -> DailyLoopResult<Outcome> {
+    ) -> AgendaResult<Outcome> {
         let outcome = self.get_outcome_by_id(outcome_id)?;
         let plan = self.get_plan_by_id(&outcome.daily_plan_id)?;
         if plan.locked_at.is_some() {
-            return Err(DailyLoopError::PlanLocked);
+            return Err(AgendaError::PlanLocked);
         }
 
         let new_title = title.unwrap_or(&outcome.title).to_string();
@@ -567,18 +563,18 @@ impl DailyLoopDb {
     }
 
     /// Delete an outcome
-    pub fn delete_outcome(&self, outcome_id: &str) -> DailyLoopResult<()> {
+    pub fn delete_outcome(&self, outcome_id: &str) -> AgendaResult<()> {
         let outcome = self.get_outcome_by_id(outcome_id)?;
         let plan = self.get_plan_by_id(&outcome.daily_plan_id)?;
         if plan.locked_at.is_some() {
-            return Err(DailyLoopError::PlanLocked);
+            return Err(AgendaError::PlanLocked);
         }
         self.conn
             .execute("DELETE FROM outcomes WHERE id = ?1", params![outcome_id])?;
         Ok(())
     }
 
-    pub fn get_outcome_by_id(&self, outcome_id: &str) -> DailyLoopResult<Outcome> {
+    pub fn get_outcome_by_id(&self, outcome_id: &str) -> AgendaResult<Outcome> {
         self.conn
             .query_row(
                 "SELECT id, daily_plan_id, title, linked_task_ids, created_at, ai_generated
@@ -586,7 +582,7 @@ impl DailyLoopDb {
                 params![outcome_id],
                 Self::read_outcome,
             )
-            .map_err(|_| DailyLoopError::NotFound(format!("Outcome {outcome_id}")))
+            .map_err(|_| AgendaError::NotFound(format!("Outcome {outcome_id}")))
     }
 
     // ── Deferrals ──────────────────────────────────────────────
@@ -598,7 +594,7 @@ impl DailyLoopDb {
         date: NaiveDate,
         reason: Option<&str>,
         ai_interpretation: Option<&str>,
-    ) -> DailyLoopResult<Deferral> {
+    ) -> AgendaResult<Deferral> {
         let deferral = Deferral {
             id: new_id(),
             task_id: task_id.to_string(),
@@ -625,7 +621,7 @@ impl DailyLoopDb {
     }
 
     /// Get all deferrals for a task
-    pub fn get_deferrals_for_task(&self, task_id: &str) -> DailyLoopResult<Vec<Deferral>> {
+    pub fn get_deferrals_for_task(&self, task_id: &str) -> AgendaResult<Vec<Deferral>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, task_id, date, reason, ai_interpretation, created_at
              FROM deferrals WHERE task_id = ?1 ORDER BY date ASC",
@@ -646,7 +642,7 @@ impl DailyLoopDb {
     }
 
     /// Get deferral count for a task
-    pub fn get_deferral_count(&self, task_id: &str) -> DailyLoopResult<i32> {
+    pub fn get_deferral_count(&self, task_id: &str) -> AgendaResult<i32> {
         let count: i32 = self.conn.query_row(
             "SELECT COUNT(*) FROM deferrals WHERE task_id = ?1",
             params![task_id],
@@ -659,7 +655,7 @@ impl DailyLoopDb {
     pub fn get_frequently_deferred_tasks(
         &self,
         threshold: i32,
-    ) -> DailyLoopResult<Vec<(String, i32)>> {
+    ) -> AgendaResult<Vec<(String, i32)>> {
         let mut stmt = self.conn.prepare(
             "SELECT task_id, COUNT(*) as cnt FROM deferrals
              GROUP BY task_id HAVING cnt >= ?1 ORDER BY cnt DESC",
@@ -681,7 +677,7 @@ impl DailyLoopDb {
         completed_task_ids: Vec<String>,
         notes: Option<&str>,
         ai_summary: Option<&str>,
-    ) -> DailyLoopResult<CheckIn> {
+    ) -> AgendaResult<CheckIn> {
         let check_in = CheckIn {
             id: new_id(),
             date,
@@ -726,7 +722,7 @@ impl DailyLoopDb {
     }
 
     /// Get check-in for a date
-    pub fn get_check_in(&self, date: NaiveDate) -> DailyLoopResult<Option<CheckIn>> {
+    pub fn get_check_in(&self, date: NaiveDate) -> AgendaResult<Option<CheckIn>> {
         self.conn
             .prepare(
                 "SELECT id, date, completed_task_ids, notes, ai_summary, created_at
@@ -738,7 +734,7 @@ impl DailyLoopDb {
     }
 
     /// Get recent check-ins (for context assembly)
-    pub fn get_recent_check_ins(&self, limit: i32) -> DailyLoopResult<Vec<CheckIn>> {
+    pub fn get_recent_check_ins(&self, limit: i32) -> AgendaResult<Vec<CheckIn>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, date, completed_task_ids, notes, ai_summary, created_at
              FROM check_ins ORDER BY date DESC LIMIT ?1",
@@ -750,7 +746,7 @@ impl DailyLoopDb {
     }
 
     /// Count total check-ins (for pattern recognition threshold)
-    pub fn count_check_ins(&self) -> DailyLoopResult<i32> {
+    pub fn count_check_ins(&self) -> AgendaResult<i32> {
         let count: i32 = self
             .conn
             .query_row("SELECT COUNT(*) FROM check_ins", [], |row| row.get(0))?;
@@ -765,7 +761,7 @@ impl DailyLoopDb {
         date: NaiveDate,
         summary_text: &str,
         token_count: i32,
-    ) -> DailyLoopResult<ContextSnapshot> {
+    ) -> AgendaResult<ContextSnapshot> {
         let snapshot = ContextSnapshot {
             id: new_id(),
             date,
@@ -790,7 +786,7 @@ impl DailyLoopDb {
     }
 
     /// Get the most recent context snapshot
-    pub fn get_latest_context_snapshot(&self) -> DailyLoopResult<Option<ContextSnapshot>> {
+    pub fn get_latest_context_snapshot(&self) -> AgendaResult<Option<ContextSnapshot>> {
         self.conn
             .prepare(
                 "SELECT id, date, summary_text, token_count, created_at
@@ -817,7 +813,7 @@ impl DailyLoopDb {
         daily_plan_id: &str,
         role: ChatRole,
         content: &str,
-    ) -> DailyLoopResult<ChatMessage> {
+    ) -> AgendaResult<ChatMessage> {
         let msg = ChatMessage {
             id: new_id(),
             daily_plan_id: daily_plan_id.to_string(),
@@ -842,7 +838,7 @@ impl DailyLoopDb {
     }
 
     /// Get chat history for a plan
-    pub fn get_chat_history(&self, daily_plan_id: &str) -> DailyLoopResult<Vec<ChatMessage>> {
+    pub fn get_chat_history(&self, daily_plan_id: &str) -> AgendaResult<Vec<ChatMessage>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, daily_plan_id, role, content, timestamp
              FROM chat_messages WHERE daily_plan_id = ?1 ORDER BY timestamp ASC",
@@ -862,7 +858,7 @@ impl DailyLoopDb {
     }
 
     /// Get dates that have chat messages, ordered most recent first
-    pub fn get_dates_with_chat(&self, limit: i32) -> DailyLoopResult<Vec<String>> {
+    pub fn get_dates_with_chat(&self, limit: i32) -> AgendaResult<Vec<String>> {
         let mut stmt = self.conn.prepare(
             "SELECT DISTINCT dp.date FROM daily_plans dp
              INNER JOIN chat_messages cm ON cm.daily_plan_id = dp.id
@@ -877,7 +873,7 @@ impl DailyLoopDb {
     // ── Daily Stats ────────────────────────────────────────────
 
     /// Upsert daily stats for a date+domain
-    pub fn upsert_daily_stats(&self, stats: &DailyStats) -> DailyLoopResult<()> {
+    pub fn upsert_daily_stats(&self, stats: &DailyStats) -> AgendaResult<()> {
         self.conn.execute(
             "INSERT INTO daily_stats (date, domain, planned_count, completed_count, deferred_count, avg_task_minutes)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -899,7 +895,7 @@ impl DailyLoopDb {
     }
 
     /// Get stats for the last N days (for pattern recognition)
-    pub fn get_recent_stats(&self, days: i32) -> DailyLoopResult<Vec<DailyStats>> {
+    pub fn get_recent_stats(&self, days: i32) -> AgendaResult<Vec<DailyStats>> {
         let mut stmt = self.conn.prepare(
             "SELECT date, domain, planned_count, completed_count, deferred_count, avg_task_minutes
              FROM daily_stats ORDER BY date DESC LIMIT ?1",
@@ -928,7 +924,7 @@ impl DailyLoopDb {
         top_3: Vec<String>,
         task_order: Vec<String>,
         trigger: RevisionTrigger,
-    ) -> DailyLoopResult<PlanRevision> {
+    ) -> AgendaResult<PlanRevision> {
         let next_num: i32 = self.conn.query_row(
             "SELECT COALESCE(MAX(revision_number), -1) + 1 FROM plan_revisions WHERE daily_plan_id = ?1",
             params![daily_plan_id],
@@ -963,7 +959,7 @@ impl DailyLoopDb {
     }
 
     /// Get revision history for a plan
-    pub fn get_revisions(&self, daily_plan_id: &str) -> DailyLoopResult<Vec<PlanRevision>> {
+    pub fn get_revisions(&self, daily_plan_id: &str) -> AgendaResult<Vec<PlanRevision>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, daily_plan_id, revision_number, top_3, task_order, trigger, timestamp
              FROM plan_revisions WHERE daily_plan_id = ?1 ORDER BY revision_number ASC",
@@ -992,7 +988,7 @@ mod tests {
 
     #[test]
     fn test_create_and_get_plan() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
 
         let plan = db.create_plan(date).unwrap();
@@ -1006,18 +1002,18 @@ mod tests {
 
     #[test]
     fn test_duplicate_plan_rejected() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
 
         db.create_plan(date).unwrap();
         let result = db.create_plan(date);
-        assert!(matches!(result, Err(DailyLoopError::PlanAlreadyExists(_))));
+        assert!(matches!(result, Err(AgendaError::PlanAlreadyExists(_))));
     }
 
     #[test]
     fn test_lock_allows_edits() {
         // Plans are always editable — lock is a snapshot marker, not a write guard
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
         let plan = db.create_plan(date).unwrap();
 
@@ -1030,7 +1026,7 @@ mod tests {
 
     #[test]
     fn test_toggle_task_completion() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
         let plan = db.create_plan(date).unwrap();
         assert!(plan.completed_task_ids.is_empty());
@@ -1057,7 +1053,7 @@ mod tests {
 
     #[test]
     fn test_sync_plan_index_from_markdown_replaces_derived_fields() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 4, 26).unwrap();
         let plan = db.create_plan(date).unwrap();
         db.update_plan(
@@ -1126,7 +1122,7 @@ mod tests {
 
     #[test]
     fn test_outcomes_crud() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
         let plan = db.create_plan(date).unwrap();
 
@@ -1156,7 +1152,7 @@ mod tests {
 
     #[test]
     fn test_deferral_tracking() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let d1 = NaiveDate::from_ymd_opt(2026, 3, 24).unwrap();
         let d2 = NaiveDate::from_ymd_opt(2026, 3, 25).unwrap();
         let d3 = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
@@ -1178,7 +1174,7 @@ mod tests {
 
     #[test]
     fn test_check_in_and_stats() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
 
         let ci = db
@@ -1197,7 +1193,7 @@ mod tests {
 
     #[test]
     fn test_chat_messages() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
         let plan = db.create_plan(date).unwrap();
 
@@ -1218,7 +1214,7 @@ mod tests {
 
     #[test]
     fn test_plan_revisions() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
         let plan = db.create_plan(date).unwrap();
 
@@ -1248,7 +1244,7 @@ mod tests {
 
     #[test]
     fn test_daily_stats_upsert() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
 
         let stats = DailyStats {
@@ -1274,7 +1270,7 @@ mod tests {
 
     #[test]
     fn test_context_snapshot() {
-        let db = DailyLoopDb::open_in_memory().unwrap();
+        let db = AgendaDb::open_in_memory().unwrap();
         let date = NaiveDate::from_ymd_opt(2026, 3, 26).unwrap();
 
         db.save_context_snapshot(date, "User focused on startup tasks", 150)

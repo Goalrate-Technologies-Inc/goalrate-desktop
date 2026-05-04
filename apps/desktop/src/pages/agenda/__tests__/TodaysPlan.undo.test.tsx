@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { DailyPlan, ScheduledTask } from "@goalrate-app/shared";
 import { describe, expect, it, vi } from "vitest";
-import type { UseDailyLoopReturn } from "../../../hooks/useDailyLoop";
+import type { UseAgendaReturn } from "../../../hooks/useAgenda";
 import { TodaysPlan } from "../TodaysPlan";
 
 function scheduledTask(
@@ -21,10 +21,10 @@ function scheduledTask(
   };
 }
 
-function dailyLoopWithSchedule(
+function agendaWithSchedule(
   scheduledTasks: ScheduledTask[],
   updateScheduledTasks = vi.fn().mockResolvedValue(undefined),
-): UseDailyLoopReturn {
+): UseAgendaReturn {
   const plan: DailyPlan = {
     id: "plan_2026_04_26",
     date: "2026-04-26",
@@ -85,12 +85,12 @@ describe("TodaysPlan Agenda undo", () => {
       scheduledTask("task_gamma", "Gamma task", "10:15 AM", 15),
     ];
     const updateScheduledTasks = vi.fn().mockResolvedValue(undefined);
-    const dailyLoop = dailyLoopWithSchedule(
+    const agenda = agendaWithSchedule(
       originalSchedule,
       updateScheduledTasks,
     );
 
-    render(<TodaysPlan dailyLoop={dailyLoop} />);
+    render(<TodaysPlan agenda={agenda} />);
 
     fireEvent.click(
       screen.getByRole("button", { name: 'Remove "Beta task" from Agenda' }),

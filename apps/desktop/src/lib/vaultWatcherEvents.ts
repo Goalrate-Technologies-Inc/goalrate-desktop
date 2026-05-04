@@ -64,7 +64,7 @@ export function vaultRefreshStatusLabel(paths: string[] | null): string {
   }
 }
 
-export function pathsAffectDailyLoop(
+export function pathsAffectAgenda(
   paths: string[] | null,
   date: string,
 ): boolean {

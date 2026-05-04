@@ -1,5 +1,5 @@
 [package]
-name = "daily-loop"
+name = "agenda"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

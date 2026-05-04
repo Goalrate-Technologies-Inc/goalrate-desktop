@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import type { DailyPlan } from "@goalrate-app/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UseDailyLoopReturn } from "../../../hooks/useDailyLoop";
+import type { UseAgendaReturn } from "../../../hooks/useAgenda";
 import { AssistantMissedWork } from "../AssistantMissedWork";
 
 vi.mock("../../../context/VaultContext", () => ({
@@ -17,7 +17,7 @@ vi.mock("../../../context/VaultContext", () => ({
   }),
 }));
 
-function dailyLoopForAssistant(
+function agendaForAssistant(
   sendChat = vi.fn().mockResolvedValue({
     id: "message_1",
     dailyPlanId: "plan_2026_04_26",
@@ -25,7 +25,7 @@ function dailyLoopForAssistant(
     content: "Done.",
     timestamp: "2026-04-26T09:00:00Z",
   }),
-): UseDailyLoopReturn {
+): UseAgendaReturn {
   const plan: DailyPlan = {
     id: "plan_2026_04_26",
     date: "2026-04-26",
@@ -82,9 +82,9 @@ describe("AssistantMissedWork", () => {
       }
       return Promise.resolve(undefined);
     });
-    const dailyLoop = dailyLoopForAssistant();
+    const agenda = agendaForAssistant();
 
-    const { rerender } = render(<AssistantMissedWork dailyLoop={dailyLoop} />);
+    const { rerender } = render(<AssistantMissedWork agenda={agenda} />);
 
     expect(
       screen.queryByText("Checking missed work..."),
@@ -101,7 +101,7 @@ describe("AssistantMissedWork", () => {
 
     rerender(
       <AssistantMissedWork
-        dailyLoop={{ ...dailyLoop, dataVersion: dailyLoop.dataVersion + 1 }}
+        agenda={{ ...agenda, dataVersion: agenda.dataVersion + 1 }}
       />,
     );
 
@@ -141,7 +141,7 @@ describe("AssistantMissedWork", () => {
       return Promise.resolve(undefined);
     });
 
-    render(<AssistantMissedWork dailyLoop={dailyLoopForAssistant(sendChat)} />);
+    render(<AssistantMissedWork agenda={agendaForAssistant(sendChat)} />);
 
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
     expect(
@@ -191,7 +191,7 @@ describe("AssistantMissedWork", () => {
           },
         ]);
       }
-      if (command === "daily_loop_schedule_task_for_date") {
+      if (command === "agenda_schedule_task_for_date") {
         return Promise.resolve({
           id: "plan_2026_04_27",
           date: "2026-04-27",
@@ -217,7 +217,7 @@ describe("AssistantMissedWork", () => {
       return Promise.resolve(undefined);
     });
 
-    render(<AssistantMissedWork dailyLoop={dailyLoopForAssistant(sendChat)} />);
+    render(<AssistantMissedWork agenda={agendaForAssistant(sendChat)} />);
 
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
     expect(
@@ -231,7 +231,7 @@ describe("AssistantMissedWork", () => {
     );
 
     await waitFor(() => {
-      expect(invoke).toHaveBeenCalledWith("daily_loop_schedule_task_for_date", {
+      expect(invoke).toHaveBeenCalledWith("agenda_schedule_task_for_date", {
         input: {
           vaultId: "vault_test",
           taskId: "subtask_outline",
@@ -246,9 +246,9 @@ describe("AssistantMissedWork", () => {
 
   it("persists a different missed Subtask choice without falling back to chat", async () => {
     const sendChat = vi.fn().mockResolvedValue(undefined);
-    const dailyLoop = dailyLoopForAssistant(sendChat);
+    const agenda = agendaForAssistant(sendChat);
     const refresh = vi.fn().mockResolvedValue(undefined);
-    dailyLoop.refresh = refresh;
+    agenda.refresh = refresh;
     vi.mocked(invoke).mockImplementation((command) => {
       if (command === "list_goals") {
         return Promise.resolve([
@@ -277,7 +277,7 @@ describe("AssistantMissedWork", () => {
           },
         ]);
       }
-      if (command === "daily_loop_generate_alternative_subtask") {
+      if (command === "agenda_generate_alternative_subtask") {
         return Promise.resolve({
           taskId: "subtask_task_proposal_alternative",
           title: "Write one rough sentence for Draft proposal",
@@ -310,7 +310,7 @@ describe("AssistantMissedWork", () => {
       return Promise.resolve(undefined);
     });
 
-    render(<AssistantMissedWork dailyLoop={dailyLoop} />);
+    render(<AssistantMissedWork agenda={agenda} />);
 
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
 
@@ -322,7 +322,7 @@ describe("AssistantMissedWork", () => {
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith(
-        "daily_loop_generate_alternative_subtask",
+        "agenda_generate_alternative_subtask",
         {
           input: {
             vaultId: "vault_test",
@@ -368,7 +368,7 @@ describe("AssistantMissedWork", () => {
           },
         ]);
       }
-      if (command === "daily_loop_schedule_parent_task_for_missed_subtask") {
+      if (command === "agenda_schedule_parent_task_for_missed_subtask") {
         return Promise.resolve({
           id: "plan_2026_04_27",
           date: "2026-04-27",
@@ -394,7 +394,7 @@ describe("AssistantMissedWork", () => {
       return Promise.resolve(undefined);
     });
 
-    render(<AssistantMissedWork dailyLoop={dailyLoopForAssistant(sendChat)} />);
+    render(<AssistantMissedWork agenda={agendaForAssistant(sendChat)} />);
 
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
 
@@ -406,7 +406,7 @@ describe("AssistantMissedWork", () => {
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith(
-        "daily_loop_schedule_parent_task_for_missed_subtask",
+        "agenda_schedule_parent_task_for_missed_subtask",
         {
           input: {
             vaultId: "vault_test",
@@ -450,7 +450,7 @@ describe("AssistantMissedWork", () => {
           },
         ]);
       }
-      if (command === "daily_loop_generate_alternative_task") {
+      if (command === "agenda_generate_alternative_task") {
         return Promise.resolve({
           taskId: "task_goal_launch_alternative",
           title: "Write a simpler next step for Launch",
@@ -483,7 +483,7 @@ describe("AssistantMissedWork", () => {
       return Promise.resolve(undefined);
     });
 
-    render(<AssistantMissedWork dailyLoop={dailyLoopForAssistant(sendChat)} />);
+    render(<AssistantMissedWork agenda={agendaForAssistant(sendChat)} />);
 
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
 
@@ -495,7 +495,7 @@ describe("AssistantMissedWork", () => {
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith(
-        "daily_loop_generate_alternative_task",
+        "agenda_generate_alternative_task",
         {
           input: {
             vaultId: "vault_test",
@@ -539,7 +539,7 @@ describe("AssistantMissedWork", () => {
           },
         ]);
       }
-      if (command === "daily_loop_archive_parent_task_for_missed_subtask") {
+      if (command === "agenda_archive_parent_task_for_missed_subtask") {
         return Promise.resolve({
           goalId: "goal_launch",
           archivedTaskId: "task_proposal",
@@ -549,7 +549,7 @@ describe("AssistantMissedWork", () => {
       return Promise.resolve(undefined);
     });
 
-    render(<AssistantMissedWork dailyLoop={dailyLoopForAssistant(sendChat)} />);
+    render(<AssistantMissedWork agenda={agendaForAssistant(sendChat)} />);
 
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
 
@@ -571,7 +571,7 @@ describe("AssistantMissedWork", () => {
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith(
-        "daily_loop_archive_parent_task_for_missed_subtask",
+        "agenda_archive_parent_task_for_missed_subtask",
         {
           input: {
             vaultId: "vault_test",
@@ -615,7 +615,7 @@ describe("AssistantMissedWork", () => {
           },
         ]);
       }
-      if (command === "daily_loop_archive_goal_for_missed_subtask") {
+      if (command === "agenda_archive_goal_for_missed_subtask") {
         return Promise.resolve({
           goalId: "goal_launch",
           status: "archived",
@@ -624,7 +624,7 @@ describe("AssistantMissedWork", () => {
       return Promise.resolve(undefined);
     });
 
-    render(<AssistantMissedWork dailyLoop={dailyLoopForAssistant(sendChat)} />);
+    render(<AssistantMissedWork agenda={agendaForAssistant(sendChat)} />);
 
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
 
@@ -646,7 +646,7 @@ describe("AssistantMissedWork", () => {
 
     await waitFor(() => {
       expect(invoke).toHaveBeenCalledWith(
-        "daily_loop_archive_goal_for_missed_subtask",
+        "agenda_archive_goal_for_missed_subtask",
         {
           input: {
             vaultId: "vault_test",

@@ -1,7 +1,7 @@
+pub mod agenda;
+pub mod agenda_ai;
 pub mod app_links;
 pub mod auth;
-pub mod daily_loop;
-pub mod daily_loop_ai;
 pub mod focus;
 pub mod goal_milestones;
 pub mod goals;
