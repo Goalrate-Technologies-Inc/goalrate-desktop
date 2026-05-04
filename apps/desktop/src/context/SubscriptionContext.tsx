@@ -7,15 +7,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  entitlementsForPlan,
-  type EntitlementKey,
-} from "@goalrate-app/shared";
+import { entitlementsForPlan, type EntitlementKey } from "@goalrate-app/shared";
 import {
   FALLBACK_PLUS_PRODUCT,
   defaultFreeSubscriptionStatus,
   getPlusSubscriptionProduct,
   getSubscriptionStatus,
+  normalizeEntitlementStatus,
   openBillingPortal,
   openPlusCheckout,
   subscriptionAllowsAi,
@@ -31,6 +29,7 @@ interface SubscriptionContextValue {
   isLoading: boolean;
   isPurchasing: boolean;
   isManaging: boolean;
+  isAwaitingCheckoutAuth: boolean;
   error: string | null;
   allowsAi: boolean;
   hasEntitlement: (entitlement: EntitlementKey) => boolean;
@@ -39,7 +38,9 @@ interface SubscriptionContextValue {
   manageBilling: () => Promise<void>;
 }
 
-const SubscriptionContext = createContext<SubscriptionContextValue | null>(null);
+const SubscriptionContext = createContext<SubscriptionContextValue | null>(
+  null,
+);
 
 const fallbackSubscriptionContext: SubscriptionContextValue = {
   status: defaultFreeSubscriptionStatus(),
@@ -47,6 +48,7 @@ const fallbackSubscriptionContext: SubscriptionContextValue = {
   isLoading: false,
   isPurchasing: false,
   isManaging: false,
+  isAwaitingCheckoutAuth: false,
   error: null,
   allowsAi: false,
   hasEntitlement: (entitlement) => entitlementsForPlan("free")[entitlement],
@@ -80,12 +82,13 @@ export function SubscriptionProvider({
 }: {
   children: ReactNode;
 }): React.ReactElement {
-  const { isAuthenticated, mode } = useAuth();
+  const { isAuthenticated, mode, entitlements } = useAuth();
   const [status, setStatus] = useState<BillingSubscriptionStatus>(() =>
     defaultFreeSubscriptionStatus(),
   );
-  const [product, setProduct] =
-    useState<SubscriptionProduct>(FALLBACK_PLUS_PRODUCT);
+  const [product, setProduct] = useState<SubscriptionProduct>(
+    FALLBACK_PLUS_PRODUCT,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isManaging, setIsManaging] = useState(false);
@@ -128,6 +131,16 @@ export function SubscriptionProvider({
     };
   }, [refresh, isAuthenticated, mode]);
 
+  const effectiveStatus = useMemo(() => {
+    if (entitlements) {
+      return normalizeEntitlementStatus(entitlements);
+    }
+    if (!isAuthenticated) {
+      return defaultFreeSubscriptionStatus();
+    }
+    return status;
+  }, [entitlements, isAuthenticated, status]);
+
   const startPlusCheckout = useCallback(async () => {
     setIsPurchasing(true);
     setError(null);
@@ -155,24 +168,25 @@ export function SubscriptionProvider({
   }, [refresh]);
 
   const value = useMemo<SubscriptionContextValue>(() => {
-    const entitlements = entitlementsForPlan(status.planId);
+    const entitlements = entitlementsForPlan(effectiveStatus.planId);
     return {
-      status,
+      status: effectiveStatus,
       product,
       isLoading,
       isPurchasing,
       isManaging,
+      isAwaitingCheckoutAuth: false,
       error,
-      allowsAi: subscriptionAllowsAi(status),
+      allowsAi: subscriptionAllowsAi(effectiveStatus),
       hasEntitlement: (entitlement) =>
         entitlements[entitlement] ||
-        subscriptionHasEntitlement(status, entitlement),
+        subscriptionHasEntitlement(effectiveStatus, entitlement),
       refresh,
       startPlusCheckout,
       manageBilling,
     };
   }, [
-    status,
+    effectiveStatus,
     product,
     isLoading,
     isPurchasing,

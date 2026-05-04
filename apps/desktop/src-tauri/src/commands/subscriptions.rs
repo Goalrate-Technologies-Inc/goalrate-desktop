@@ -1,13 +1,22 @@
 //! Subscription entitlement helpers for the direct Mac launch.
 
+use std::collections::HashMap;
+
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::{AppError, ErrorCode};
 
 const GOALRATE_API_BASE_URL: &str = "https://api.goalrate.com";
+const ENTITLEMENTS_PATH: &str = "/entitlements";
 const SUBSCRIPTION_DETAILS_PATH: &str = "/api/subscriptions/me/details";
 const SUBSCRIPTION_STATUS_FALLBACK_PATH: &str = "/api/subscriptions/me";
+const AI_FEATURE_KEYS: [&str; 4] = [
+    "ai.agenda.generate",
+    "ai.assistant.chat",
+    "ai.task.breakdown",
+    "ai.memory.context",
+];
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -18,6 +27,15 @@ struct AccountSubscriptionStatus {
     status: Option<String>,
     #[serde(default)]
     source: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct AccountEntitlementStatus {
+    #[serde(default)]
+    active_workspace_plan: Option<AccountSubscriptionStatus>,
+    #[serde(default)]
+    active_workspace_features: HashMap<String, bool>,
 }
 
 fn truthy_env(name: &str) -> bool {
@@ -120,6 +138,26 @@ fn subscription_status_allows_hosted_ai(status: &AccountSubscriptionStatus) -> b
     plan_allows_ai && source_is_stripe && active_state
 }
 
+fn entitlement_status_allows_hosted_ai(status: &AccountEntitlementStatus) -> bool {
+    let all_ai_features_enabled = AI_FEATURE_KEYS.iter().all(|feature| {
+        status
+            .active_workspace_features
+            .get(*feature)
+            .copied()
+            .unwrap_or(false)
+    });
+    let plan_is_active_stripe = status
+        .active_workspace_plan
+        .as_ref()
+        .map(|plan| {
+            source_allows_stripe_entitlement(plan.source.as_deref())
+                && matches!(plan.status.as_deref(), Some("active"))
+        })
+        .unwrap_or(false);
+
+    all_ai_features_enabled && plan_is_active_stripe
+}
+
 fn entitlement_error() -> AppError {
     AppError::new(
         ErrorCode::PermissionDenied,
@@ -127,12 +165,14 @@ fn entitlement_error() -> AppError {
     )
 }
 
-async fn fetch_account_subscription_status(
-    access_token: &str,
-) -> Result<Option<AccountSubscriptionStatus>, AppError> {
+async fn fetch_account_ai_entitlement(access_token: &str) -> Result<bool, AppError> {
     let client = reqwest::Client::new();
 
-    for path in [SUBSCRIPTION_DETAILS_PATH, SUBSCRIPTION_STATUS_FALLBACK_PATH] {
+    for path in [
+        ENTITLEMENTS_PATH,
+        SUBSCRIPTION_DETAILS_PATH,
+        SUBSCRIPTION_STATUS_FALLBACK_PATH,
+    ] {
         let response = client
             .get(subscription_api_url(path))
             .header("Accept", "application/json")
@@ -158,9 +198,9 @@ async fn fetch_account_subscription_status(
 
         let body = response.text().await.unwrap_or_default();
         if !status.is_success() {
-            if path == SUBSCRIPTION_DETAILS_PATH {
+            if path != SUBSCRIPTION_STATUS_FALLBACK_PATH {
                 log::warn!(
-                    "Unable to load subscription details from {}; trying fallback status endpoint: HTTP {}",
+                    "Unable to load entitlement status from {}; trying fallback endpoint: HTTP {}",
                     path,
                     status
                 );
@@ -173,7 +213,7 @@ async fn fetch_account_subscription_status(
         }
 
         if body.trim().is_empty() {
-            return Ok(None);
+            return Ok(false);
         }
 
         let value: Value = serde_json::from_str(&body).map_err(|err| {
@@ -183,8 +223,19 @@ async fn fetch_account_subscription_status(
             )
         })?;
 
+        if path == ENTITLEMENTS_PATH {
+            let status: AccountEntitlementStatus =
+                serde_json::from_value(value).map_err(|err| {
+                    AppError::new(
+                        ErrorCode::UnknownError,
+                        format!("Unable to parse GoalRate entitlements: {err}"),
+                    )
+                })?;
+            return Ok(entitlement_status_allows_hosted_ai(&status));
+        }
+
         let Some(payload) = subscription_payload_from_value(value) else {
-            return Ok(None);
+            return Ok(false);
         };
 
         let subscription = serde_json::from_value(payload).map_err(|err| {
@@ -194,10 +245,10 @@ async fn fetch_account_subscription_status(
             )
         })?;
 
-        return Ok(Some(subscription));
+        return Ok(subscription_status_allows_hosted_ai(&subscription));
     }
 
-    Ok(None)
+    Ok(false)
 }
 
 pub async fn require_ai_entitlement() -> Result<(), AppError> {
@@ -219,12 +270,7 @@ pub async fn require_ai_entitlement() -> Result<(), AppError> {
         ));
     }
 
-    let subscription = fetch_account_subscription_status(&tokens.access_token).await?;
-    if subscription
-        .as_ref()
-        .map(subscription_status_allows_hosted_ai)
-        .unwrap_or(false)
-    {
+    if fetch_account_ai_entitlement(&tokens.access_token).await? {
         Ok(())
     } else {
         Err(entitlement_error())
@@ -244,6 +290,40 @@ mod tests {
         };
 
         assert!(subscription_status_allows_hosted_ai(&status));
+    }
+
+    #[test]
+    fn active_entitlement_features_unlock_hosted_ai() {
+        let status = AccountEntitlementStatus {
+            active_workspace_plan: Some(AccountSubscriptionStatus {
+                plan_id: Some("plus".to_string()),
+                status: Some("active".to_string()),
+                source: Some("stripe".to_string()),
+            }),
+            active_workspace_features: AI_FEATURE_KEYS
+                .iter()
+                .map(|feature| ((*feature).to_string(), true))
+                .collect(),
+        };
+
+        assert!(entitlement_status_allows_hosted_ai(&status));
+    }
+
+    #[test]
+    fn entitlement_features_do_not_unlock_when_billing_is_not_active() {
+        let status = AccountEntitlementStatus {
+            active_workspace_plan: Some(AccountSubscriptionStatus {
+                plan_id: Some("plus".to_string()),
+                status: Some("trialing".to_string()),
+                source: Some("stripe".to_string()),
+            }),
+            active_workspace_features: AI_FEATURE_KEYS
+                .iter()
+                .map(|feature| ((*feature).to_string(), true))
+                .collect(),
+        };
+
+        assert!(!entitlement_status_allows_hosted_ai(&status));
     }
 
     #[test]

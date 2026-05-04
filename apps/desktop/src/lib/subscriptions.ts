@@ -1,26 +1,35 @@
-import { invoke } from "@tauri-apps/api/core";
 import {
+  backendFeatureForEntitlement,
   entitlementsForPlan,
+  entitlementResponseAllowsAi,
+  entitlementResponseHasFeature,
   normalizeLaunchPlanId,
   planAllowsAi,
   type BillingCycle,
   type EntitlementKey,
+  type EntitlementResponse,
   type LaunchPlanId,
   type PlanId,
   type Subscription,
 } from "@goalrate-app/shared";
-import type { StoredTokens } from "../types/auth";
+import type { StoredUser } from "../types/auth";
+import {
+  apiRequest,
+  getEntitlements,
+  getStoredAccessToken,
+  isTauriRuntime,
+  openBillingPortalFromBackend,
+  openPlusCheckoutFromBackend,
+  openWebPlusSignup,
+} from "./authBillingEntitlements";
 
 export const PLUS_PLAN_ID = "plus" satisfies LaunchPlanId;
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.DEV ? "http://localhost:8000" : "https://api.goalrate.com");
 const HAS_CONFIGURED_API_BASE_URL = Boolean(import.meta.env.VITE_API_BASE_URL);
 
-const BILLING_SUCCESS_URL = "https://goalrate.com/account/billing/success";
-const BILLING_CANCEL_URL = "https://goalrate.com/account/billing/cancel";
-const BILLING_RETURN_URL = "https://goalrate.com/account/billing";
+const BILLING_SUCCESS_URL = "https://app.goalrate.com/account/billing/success";
+const BILLING_CANCEL_URL = "https://app.goalrate.com/account/billing/cancel";
+const BILLING_RETURN_URL = "https://app.goalrate.com/account/billing";
 
 export type SubscriptionState =
   | "none"
@@ -62,6 +71,7 @@ export interface BillingSubscriptionStatus {
   expiresAt: string | null;
   checkedAt: string;
   managementUrl: string | null;
+  entitlements: EntitlementResponse | null;
 }
 
 interface PlanPricingResponse {
@@ -110,16 +120,6 @@ export const FALLBACK_PLUS_PRODUCT: SubscriptionProduct = {
   },
 };
 
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-function apiUrl(path: string): string {
-  const base = API_BASE_URL.replace(/\/+$/, "");
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${base}${normalizedPath}`;
-}
-
 function priceLabel(value: number | undefined, suffix: string): string | null {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return null;
@@ -143,57 +143,9 @@ export function defaultFreeSubscriptionStatus(
     expiresAt: null,
     checkedAt: fallbackCheckedAt(),
     managementUrl: null,
+    entitlements: null,
     ...overrides,
   };
-}
-
-async function getStoredAccessToken(): Promise<string | null> {
-  if (!isTauriRuntime()) {
-    return null;
-  }
-
-  const tokens = await invoke<StoredTokens | null>("get_tokens");
-  return tokens?.accessToken ?? null;
-}
-
-async function apiRequest<T>(
-  path: string,
-  options: {
-    method?: "GET" | "POST";
-    accessToken?: string | null;
-    body?: unknown;
-  } = {},
-): Promise<T> {
-  const response = await fetch(apiUrl(path), {
-    method: options.method ?? "GET",
-    headers: {
-      Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(options.accessToken
-        ? { Authorization: `Bearer ${options.accessToken}` }
-        : {}),
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-
-  if (response.status === 204) {
-    return null as T;
-  }
-
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-
-  if (!response.ok) {
-    const message =
-      typeof data?.detail === "string"
-        ? data.detail
-        : typeof data?.message === "string"
-          ? data.message
-          : `GoalRate billing request failed (${response.status}).`;
-    throw new Error(message);
-  }
-
-  return data as T;
 }
 
 function normalizeSubscriptionState(
@@ -222,9 +174,7 @@ function normalizeSubscriptionState(
 
 function stateIsEntitled(state: SubscriptionState): boolean {
   return (
-    state === "active" ||
-    state === "activeCanceled" ||
-    state === "gracePeriod"
+    state === "active" || state === "activeCanceled" || state === "gracePeriod"
   );
 }
 
@@ -238,8 +188,13 @@ export function normalizeSubscriptionStatus(
   }
 
   const cancelAtPeriodEnd =
-    subscription.cancelAtPeriodEnd ?? subscription.cancel_at_period_end ?? false;
-  const state = normalizeSubscriptionState(subscription.status, cancelAtPeriodEnd);
+    subscription.cancelAtPeriodEnd ??
+    subscription.cancel_at_period_end ??
+    false;
+  const state = normalizeSubscriptionState(
+    subscription.status,
+    cancelAtPeriodEnd,
+  );
   const rawPlanId = subscription.planId ?? subscription.plan_id;
   const planId = stateIsEntitled(state)
     ? normalizeLaunchPlanId(rawPlanId)
@@ -250,7 +205,9 @@ export function normalizeSubscriptionStatus(
     state,
     active: stateIsEntitled(state) && planAllowsAi(planId),
     willRenew:
-      state === "active" || state === "activeCanceled" ? !cancelAtPeriodEnd : null,
+      state === "active" || state === "activeCanceled"
+        ? !cancelAtPeriodEnd
+        : null,
     source: state === "none" ? "none" : "stripe",
     expiresAt:
       subscription.currentPeriodEnd ?? subscription.current_period_end ?? null,
@@ -259,10 +216,46 @@ export function normalizeSubscriptionStatus(
   });
 }
 
+export function normalizeEntitlementStatus(
+  entitlements: EntitlementResponse,
+): BillingSubscriptionStatus {
+  const allowsAi = entitlementResponseAllowsAi(entitlements);
+  const activePlan = entitlements.activeWorkspacePlan;
+  const state = normalizeSubscriptionState(
+    activePlan.status,
+    activePlan.cancelAtPeriodEnd ?? false,
+  );
+
+  return defaultFreeSubscriptionStatus({
+    planId: allowsAi ? PLUS_PLAN_ID : "free",
+    state,
+    active: allowsAi,
+    willRenew:
+      state === "active" || state === "activeCanceled"
+        ? !(activePlan.cancelAtPeriodEnd ?? false)
+        : null,
+    source:
+      activePlan.source === "stripe"
+        ? "stripe"
+        : activePlan.source === "none"
+          ? "none"
+          : "unavailable",
+    expiresAt: activePlan.currentPeriodEndsAt ?? null,
+    checkedAt: entitlements.refreshedAt,
+    managementUrl: BILLING_RETURN_URL,
+    entitlements,
+  });
+}
+
 export function subscriptionHasEntitlement(
   status: BillingSubscriptionStatus | null | undefined,
   entitlement: EntitlementKey,
 ): boolean {
+  const backendFeature = backendFeatureForEntitlement(entitlement);
+  if (status?.entitlements) {
+    return entitlementResponseHasFeature(status.entitlements, backendFeature);
+  }
+
   const planId = status?.active ? status.planId : "free";
   return entitlementsForPlan(planId)[entitlement];
 }
@@ -301,6 +294,20 @@ export async function getSubscriptionStatus(): Promise<BillingSubscriptionStatus
     });
   }
 
+  let user: StoredUser | null = null;
+  if (isTauriRuntime()) {
+    user = await import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke<StoredUser | null>("get_stored_user"))
+      .catch(() => null);
+  }
+
+  try {
+    const entitlements = await getEntitlements(accessToken, user);
+    return normalizeEntitlementStatus(entitlements);
+  } catch {
+    // Fall through to the legacy subscription endpoints for older dev servers.
+  }
+
   try {
     const details = await apiRequest<SubscriptionDetailsResponse | null>(
       "/api/subscriptions/me/details",
@@ -321,7 +328,15 @@ export async function openPlusCheckout(
 ): Promise<void> {
   const accessToken = await getStoredAccessToken();
   if (!accessToken) {
-    throw new Error("Sign in to subscribe to GoalRate Plus.");
+    await openWebPlusSignup(billingCycle);
+    return;
+  }
+
+  try {
+    await openPlusCheckoutFromBackend(accessToken, billingCycle);
+    return;
+  } catch {
+    // Fall back to the legacy route while older dev backends are still running.
   }
 
   const session = await apiRequest<CheckoutSessionResponse>(
@@ -343,13 +358,22 @@ export async function openPlusCheckout(
     throw new Error("GoalRate did not return a Stripe checkout URL.");
   }
 
-  await invoke("open_billing_url", { url });
+  await import("@tauri-apps/api/core").then(({ invoke }) =>
+    invoke("open_billing_url", { url }),
+  );
 }
 
 export async function openBillingPortal(): Promise<void> {
   const accessToken = await getStoredAccessToken();
   if (!accessToken) {
     throw new Error("Sign in to manage your GoalRate subscription.");
+  }
+
+  try {
+    await openBillingPortalFromBackend(accessToken);
+    return;
+  } catch {
+    // Fall back to the legacy route while older dev backends are still running.
   }
 
   const portal = await apiRequest<BillingPortalResponse>(
@@ -368,5 +392,7 @@ export async function openBillingPortal(): Promise<void> {
     throw new Error("GoalRate did not return a Stripe billing portal URL.");
   }
 
-  await invoke("open_billing_url", { url });
+  await import("@tauri-apps/api/core").then(({ invoke }) =>
+    invoke("open_billing_url", { url }),
+  );
 }

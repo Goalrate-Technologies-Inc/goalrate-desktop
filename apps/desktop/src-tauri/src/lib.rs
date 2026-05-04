@@ -7,7 +7,7 @@ use tauri::Emitter;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use commands::app_links::{
-    open_billing_url, open_privacy_policy, open_support_page, open_terms_of_use,
+    open_auth_url, open_billing_url, open_privacy_policy, open_support_page, open_terms_of_use,
 };
 use commands::auth::{
     clear_tokens, get_current_user_id, get_stored_user, get_tokens, has_valid_tokens, store_tokens,
@@ -223,10 +223,21 @@ pub fn run() {
             open_privacy_policy,
             open_support_page,
             open_terms_of_use,
+            open_auth_url,
             open_billing_url,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Opened { urls } = event {
+                for url in urls {
+                    let callback_url = url.to_string();
+                    if callback_url.starts_with("goalrate://auth/callback") {
+                        let _ = app.emit("auth-callback-url", callback_url);
+                    }
+                }
+            }
+        });
 }
 
 #[cfg(test)]

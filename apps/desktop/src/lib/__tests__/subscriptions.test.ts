@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizeEntitlementStatus,
   normalizeSubscriptionStatus,
   subscriptionAllowsAi,
   subscriptionHasEntitlement,
 } from "../subscriptions";
 import {
+  backendFeaturesForPlan,
   hasEntitlement,
   planAllowsAi,
+  type EntitlementResponse,
 } from "@goalrate-app/shared";
 
 describe("launch entitlement matrix", () => {
@@ -99,6 +102,82 @@ describe("Stripe subscription state mapping", () => {
         plan_id: planId,
         status: "active",
       });
+
+      expect(status.planId).toBe("free");
+      expect(status.active).toBe(false);
+      expect(subscriptionAllowsAi(status)).toBe(false);
+    }
+  });
+});
+
+describe("backend entitlement response mapping", () => {
+  function entitlementResponse(
+    planId: "free" | "plus",
+    status: "none" | "active" | "trialing" | "past_due",
+  ): EntitlementResponse {
+    return {
+      user: {
+        id: "user_1",
+        email: "user@example.com",
+        name: "Test User",
+        avatarUrl: null,
+      },
+      activeWorkspace: {
+        id: "workspace_1",
+        name: "Personal",
+        type: "personal",
+        role: "owner",
+      },
+      accountEffectivePlan: {
+        id: status === "active" ? planId : "free",
+        sourceWorkspaceId: status === "active" ? "workspace_1" : null,
+        sourceWorkspaceName: status === "active" ? "Personal" : null,
+      },
+      activeWorkspacePlan: {
+        id: planId,
+        status,
+        source: status === "none" ? "none" : "stripe",
+        currentPeriodStartsAt: null,
+        currentPeriodEndsAt: null,
+        cancelAtPeriodEnd: false,
+      },
+      activeWorkspaceFeatures: backendFeaturesForPlan(
+        status === "active" ? planId : "free",
+      ),
+      workspaceMemberships: [
+        {
+          id: "workspace_1",
+          name: "Personal",
+          type: "personal",
+          role: "owner",
+          plan: status === "active" ? planId : "free",
+        },
+      ],
+      limits: {
+        period: status === "active" ? "subscription_billing_period" : "none",
+        aiOperationsIncluded:
+          status === "active" && planId === "plus" ? 300 : 0,
+        aiOperationsUsed: 0,
+      },
+      refreshedAt: "2026-05-02T00:00:00.000Z",
+    };
+  }
+
+  it("uses backend AI feature grants rather than plan name alone", () => {
+    const status = normalizeEntitlementStatus(
+      entitlementResponse("plus", "active"),
+    );
+
+    expect(status.planId).toBe("plus");
+    expect(status.active).toBe(true);
+    expect(subscriptionAllowsAi(status)).toBe(true);
+  });
+
+  it("does not unlock AI when backend features are free for non-active billing", () => {
+    for (const stripeState of ["trialing", "past_due"] as const) {
+      const status = normalizeEntitlementStatus(
+        entitlementResponse("plus", stripeState),
+      );
 
       expect(status.planId).toBe("free");
       expect(status.active).toBe(false);

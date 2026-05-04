@@ -13,6 +13,7 @@ This directory contains living product specs and PRD-style implementation notes 
 - [Eisenhower Prioritization](eisenhower-prioritization.md): Do/Schedule/Delegate/Delete prioritization and how it drives Roadmap and Agenda behavior.
 - [Subscription Tiers](subscription-tiers.md): Free and Plus launch hierarchy, with future tiers reserved until their features are implemented.
 - [Monetization Strategy Research](monetization-strategy.md): pricing research, AI cost posture, launch sequence, and recommended monetization model.
+- [Authentication, Billing, and Entitlements](auth-billing-entitlements.md): WorkOS AuthKit, Stripe Billing, backend-owned entitlements, desktop sign-in, and the Premium organization path.
 
 ## Conventions
 

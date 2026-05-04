@@ -61,22 +61,30 @@ export function PlusUpgradePanel({
     isLoading,
     isPurchasing,
     isManaging,
+    isAwaitingCheckoutAuth,
     error,
     startPlusCheckout,
   } = useSubscription();
 
-  const disabled = isLoading || isPurchasing || isManaging;
+  const disabled =
+    isLoading || isPurchasing || isManaging || isAwaitingCheckoutAuth;
 
   return (
-    <div className={compact ? "rounded-lg border border-border bg-surface p-4" : "rounded-lg border border-border bg-surface p-5"}>
+    <div
+      className={
+        compact
+          ? "rounded-lg border border-border bg-surface p-4"
+          : "rounded-lg border border-border bg-surface p-5"
+      }
+    >
       <div className="mb-3 flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-accent-goals" />
         <h3 className="font-serif text-lg text-text-primary">
-          Upgrade to GoalRate Plus
+          Upgrade to GoalRate Plus for AI planning.
         </h3>
       </div>
       <p className="text-sm leading-relaxed text-text-secondary">
-        Plus unlocks AI planning for your local-first vault.
+        Hosted AI unlocks when your Plus subscription is active.
       </p>
       <div className="mt-3 rounded-md bg-surface-warm px-3 py-2">
         <p className="text-sm font-medium text-text-primary">
@@ -89,7 +97,10 @@ export function PlusUpgradePanel({
       {!compact && (
         <ul className="mt-3 space-y-1.5">
           {PLUS_FEATURES.map((feature) => (
-            <li key={feature} className="flex items-center gap-2 text-xs text-text-secondary">
+            <li
+              key={feature}
+              className="flex items-center gap-2 text-xs text-text-secondary"
+            >
               <Check className="h-3.5 w-3.5 text-progress-high" />
               {feature}
             </li>
@@ -105,10 +116,19 @@ export function PlusUpgradePanel({
           disabled={disabled}
           className="inline-flex items-center gap-2 rounded-md bg-text-primary px-3 py-2 text-sm font-medium text-text-inverse transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {isPurchasing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          Subscribe
+          {isPurchasing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {isAwaitingCheckoutAuth ? "Finish sign-in" : "Subscribe"}
         </button>
       </div>
+      {isAwaitingCheckoutAuth && (
+        <p className="mt-2 text-xs text-text-muted">
+          Finish sign-in in your browser. Checkout will open after you return.
+        </p>
+      )}
       {status.state === "pastDue" && (
         <p className="mt-2 text-xs text-text-muted">
           Billing needs attention before AI can stay unlocked.
@@ -148,6 +168,7 @@ export function SubscriptionSettingsSection(): React.ReactElement {
     isLoading,
     isPurchasing,
     isManaging,
+    isAwaitingCheckoutAuth,
     error,
     allowsAi,
     refresh,
@@ -155,7 +176,8 @@ export function SubscriptionSettingsSection(): React.ReactElement {
     manageBilling,
   } = useSubscription();
 
-  const disabled = isLoading || isPurchasing || isManaging;
+  const disabled =
+    isLoading || isPurchasing || isManaging || isAwaitingCheckoutAuth;
   const renewal = renewalLabel(status.willRenew, status.expiresAt);
 
   return (
@@ -199,7 +221,10 @@ export function SubscriptionSettingsSection(): React.ReactElement {
         </p>
         <ul className="mt-2 space-y-1">
           {PLUS_FEATURES.map((feature) => (
-            <li key={feature} className="flex items-center gap-2 text-xs text-text-secondary">
+            <li
+              key={feature}
+              className="flex items-center gap-2 text-xs text-text-secondary"
+            >
               <Check className="h-3.5 w-3.5 text-progress-high" />
               {feature}
             </li>
@@ -215,8 +240,12 @@ export function SubscriptionSettingsSection(): React.ReactElement {
             disabled={disabled || allowsAi}
             className="inline-flex items-center justify-center gap-1.5 rounded-md bg-text-primary px-2 py-1.5 text-xs font-medium text-text-inverse transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            {isPurchasing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-            Subscribe
+            {isPurchasing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            {isAwaitingCheckoutAuth ? "Finish sign-in" : "Subscribe"}
           </button>
           <button
             type="button"
@@ -226,10 +255,19 @@ export function SubscriptionSettingsSection(): React.ReactElement {
             disabled={disabled}
             className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-warm disabled:opacity-40"
           >
-            {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            {isLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
             Refresh
           </button>
         </div>
+        {isAwaitingCheckoutAuth && (
+          <p className="mt-2 text-xs text-text-muted">
+            Finish sign-in in your browser. Checkout will open after you return.
+          </p>
+        )}
 
         <button
           type="button"

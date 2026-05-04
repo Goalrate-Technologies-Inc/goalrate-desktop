@@ -43,6 +43,7 @@ vi.mock("../../../context/SubscriptionContext", () => ({
     isLoading: false,
     isPurchasing: false,
     isManaging: false,
+    isAwaitingCheckoutAuth: false,
     error: null,
     allowsAi: subscriptionState.allowsAi,
     hasEntitlement: () => subscriptionState.allowsAi,
@@ -101,7 +102,9 @@ describe("PlanGenerateButton subscription gating", () => {
     const loop = dailyLoop();
     render(<PlanGenerateButton dailyLoop={loop} />);
 
-    expect(screen.getByText("Upgrade to GoalRate Plus")).toBeInTheDocument();
+    expect(
+      screen.getByText("Upgrade to GoalRate Plus for AI planning."),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create Agenda" }));
 
     await waitFor(() => {
