@@ -43,17 +43,6 @@ const HOSTED_AI_BACKFILL_ROUTE_MODEL_ID: &str = "goalrate::agenda-economy";
 const AI_OVERLOADED_STATUS_CODE: u16 = 529;
 const AI_OVERLOADED_RETRY_DELAY_MS: u64 = 2_000;
 
-// =============================================================================
-// Dev-mode: Mock Responses
-// =============================================================================
-
-/// Returns true when `GOALRATE_AI_MOCK=true` or `1`.
-fn is_mock_mode() -> bool {
-    std::env::var("GOALRATE_AI_MOCK")
-        .map(|v| v == "true" || v == "1")
-        .unwrap_or(false)
-}
-
 fn truthy_env(name: &str) -> bool {
     std::env::var(name)
         .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "True"))
@@ -75,16 +64,6 @@ fn hosted_ai_required() -> bool {
         || truthy_env("GOALRATE_REQUIRE_HOSTED_AI")
         || !cfg!(debug_assertions)
 }
-
-fn is_hosted_ai_build() -> bool {
-    hosted_ai_required()
-}
-
-/// Mock response for chat reprioritization.
-const MOCK_CHAT_RESPONSE: &str = r#"{
-  "message": "[MOCK] Got it — I've noted your request and adjusted the plan accordingly.",
-  "plan_update": null
-}"#;
 
 const CHAT_REPRIORITIZE_REPAIR_SYSTEM_PROMPT: &str = r#"You repair GoalRate Assistant chat adjustment responses.
 
@@ -124,42 +103,6 @@ Rules:
 - Default to making the user's requested change when context makes a reasonable update possible.
 - Only push back when the visible schedule cannot fit the requested work inside the user's time constraints, the day would need to start earlier, or required tasks are mutually impossible. In that case, return the closest executable plan_update and say what does not fit.
 - Do not return null plan_update. If the request cannot be fully satisfied, still return the closest executable plan_update and explain the constraint in the message."#;
-
-/// Mock response for end-of-day summary.
-const MOCK_SUMMARY_RESPONSE: &str =
-    "[MOCK] Solid day — you shipped the main feature and cleared most reviews. \
-     One task was deferred; consider tackling it first thing tomorrow.";
-
-/// Return a mock response if mock mode is active, matching the prompt type.
-///
-/// Agenda generation intentionally does not have a mock response. It must call a
-/// real provider so users never receive canned plans.
-fn mock_llm_response(system_prompt: &str) -> Option<String> {
-    if !is_mock_mode() {
-        return None;
-    }
-    // Match on known system prompt prefixes
-    let prompt_lower = system_prompt.to_lowercase();
-    if system_prompt == DAILY_PLAN_SYSTEM_PROMPT
-        || prompt_lower.contains("agenda")
-        || prompt_lower.contains("daily plan")
-    {
-        None
-    } else if system_prompt == CHAT_REPRIORITIZE_SYSTEM_PROMPT {
-        Some(MOCK_CHAT_RESPONSE.to_string())
-    } else if system_prompt == CHECK_IN_SUMMARY_PROMPT {
-        Some(MOCK_SUMMARY_RESPONSE.to_string())
-    } else {
-        // Fallback: heuristic matching by content
-        if system_prompt.contains("reprioritize") || system_prompt.contains("adjust") {
-            Some(MOCK_CHAT_RESPONSE.to_string())
-        } else if system_prompt.contains("summary") || system_prompt.contains("summariz") {
-            Some(MOCK_SUMMARY_RESPONSE.to_string())
-        } else {
-            Some(r#"{"message": "[MOCK] AI response for development"}"#.to_string())
-        }
-    }
-}
 
 // =============================================================================
 // Dev-mode: Prompt Cache Key
@@ -612,17 +555,7 @@ async fn call_llm_inner(
     app_state: Option<&AppState>,
     json_mode: bool,
 ) -> Result<String, AppError> {
-    // 1. Mock mode — return canned response, zero API calls
-    if !is_hosted_ai_build() {
-        if let Some(mock) = mock_llm_response(system_prompt) {
-            log::info!("[AI-DEV] Mock mode active — returning canned response");
-            return Ok(mock);
-        }
-    } else if is_mock_mode() {
-        log::warn!("[AI] GOALRATE_AI_MOCK is ignored when hosted AI is required");
-    }
-
-    // 2. Hosted AI path for production and explicit hosted development runs.
+    // 1. Hosted AI path for production and explicit hosted development runs.
     if let Some(url) = hosted_ai_url() {
         log::info!("[AI] Routing request through GoalRate hosted AI");
         return call_goalrate_hosted_ai(
@@ -636,7 +569,7 @@ async fn call_llm_inner(
         .await;
     }
 
-    // 3. Cache check — return cached response if prompt was seen recently
+    // 2. Cache check — return cached response if prompt was seen recently
     let effective_model = resolve_model(model_id);
     let key = cache_key(&effective_model, system_prompt, user_prompt);
     if let Some(state) = app_state {
@@ -648,7 +581,7 @@ async fn call_llm_inner(
         }
     }
 
-    // 4. Dev model override
+    // 3. Dev model override
     if effective_model != model_id {
         log::info!(
             "[AI-DEV] Model override: {} → {}",
@@ -657,7 +590,7 @@ async fn call_llm_inner(
         );
     }
 
-    // 5. Real direct-provider API call for development/direct builds.
+    // 4. Real direct-provider API call for development/direct builds.
     let (provider, model) = parse_provider_model(&effective_model);
 
     let response = match provider {
