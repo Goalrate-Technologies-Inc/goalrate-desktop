@@ -7,6 +7,7 @@
     "node": ">=24 <26"
   },
   "scripts": {
+    "start": "pnpm install --frozen-lockfile && pnpm run dev",
     "dev": "turbo run tauri:dev --filter=@goalrate-app/desktop",
     "build": "turbo run tauri:build --filter=@goalrate-app/desktop",
     "test": "turbo run test",

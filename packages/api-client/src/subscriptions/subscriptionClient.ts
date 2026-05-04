@@ -20,6 +20,10 @@ export interface PlanPricing {
   description: string;
   monthlyPrice: number;
   yearlyPrice: number;
+  stripePriceIds?: {
+    monthly?: string;
+    yearly?: string;
+  };
   features: string[];
   limits: PlanLimits;
   popular?: boolean;

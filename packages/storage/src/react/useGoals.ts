@@ -15,7 +15,12 @@ import type {
 export type GoalTaskCreate = Omit<GoalTask, 'id'>;
 /** Type for updating a goal task */
 export type GoalTaskUpdate = Partial<GoalTask>;
-import type { StorageResult, GoalQueryOptions } from '../interface';
+import type {
+  StorageResult,
+  GoalQueryOptions,
+  DeleteGoalOptions,
+  DeleteGoalTaskOptions,
+} from '../interface';
 import { useStorageContext, useCurrentVault } from './StorageProvider';
 
 // ============================================================================
@@ -38,7 +43,7 @@ export interface UseGoalsReturn {
   /** Update an existing goal */
   updateGoal: (id: string, data: GoalUpdate) => Promise<StorageResult<SmartGoal>>;
   /** Delete a goal */
-  deleteGoal: (id: string) => Promise<StorageResult<void>>;
+  deleteGoal: (id: string, options: DeleteGoalOptions) => Promise<StorageResult<void>>;
   /** Archive a goal */
   archiveGoal: (id: string) => Promise<StorageResult<SmartGoal>>;
   /** Clear error state */
@@ -63,7 +68,11 @@ export interface UseGoalTasksReturn {
   /** Complete a task */
   completeTask: (goalId: string, taskId: string) => Promise<StorageResult<GoalTask>>;
   /** Delete a task */
-  deleteTask: (goalId: string, taskId: string) => Promise<StorageResult<void>>;
+  deleteTask: (
+    goalId: string,
+    taskId: string,
+    options: DeleteGoalTaskOptions
+  ) => Promise<StorageResult<void>>;
   /** Clear error state */
   clearError: () => void;
 }
@@ -167,7 +176,7 @@ export function useGoals(options?: GoalQueryOptions): UseGoalsReturn {
   );
 
   const deleteGoal = useCallback(
-    async (id: string): Promise<StorageResult<void>> => {
+    async (id: string, options: DeleteGoalOptions): Promise<StorageResult<void>> => {
       if (!vault) {
         return {
           success: false,
@@ -175,7 +184,7 @@ export function useGoals(options?: GoalQueryOptions): UseGoalsReturn {
         };
       }
 
-      const result = await context.adapter.deleteGoal(vault.id, id);
+      const result = await context.adapter.deleteGoal(vault.id, id, options);
 
       if (result.success) {
         setGoals((prev) => prev.filter((g) => g.id !== id));
@@ -346,7 +355,11 @@ export function useGoalTasks(goalId?: string): UseGoalTasksReturn {
   );
 
   const deleteTask = useCallback(
-    async (gId: string, taskId: string): Promise<StorageResult<void>> => {
+    async (
+      gId: string,
+      taskId: string,
+      options: DeleteGoalTaskOptions
+    ): Promise<StorageResult<void>> => {
       if (!vault) {
         return {
           success: false,
@@ -354,7 +367,7 @@ export function useGoalTasks(goalId?: string): UseGoalTasksReturn {
         };
       }
 
-      const result = await context.adapter.deleteGoalTask(vault.id, gId, taskId);
+      const result = await context.adapter.deleteGoalTask(vault.id, gId, taskId, options);
 
       if (result.success) {
         setTasks((prev) => prev.filter((t) => t.id !== taskId));

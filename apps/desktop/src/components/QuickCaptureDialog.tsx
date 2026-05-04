@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { Zap } from 'lucide-react';
 import { useVault } from '../context/VaultContext';
+import { attachTauriEventListener } from '../lib/tauriEvents';
 
 export function QuickCaptureDialog(): React.ReactElement | null {
   const { currentVault } = useVault();
@@ -11,19 +11,18 @@ export function QuickCaptureDialog(): React.ReactElement | null {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-
-    const setup = async (): Promise<void> => {
-      unlisten = await listen('quick-capture', () => {
+    return attachTauriEventListener(
+      'quick-capture',
+      () => {
         setOpen(true);
         setTitle('');
-      });
-    };
-
-    setup();
-    return () => {
-      unlisten?.();
-    };
+      },
+      {
+        onError: (err) => {
+          console.error('Failed to register quick-capture listener:', err);
+        },
+      },
+    );
   }, []);
 
   useEffect(() => {

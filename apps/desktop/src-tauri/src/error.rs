@@ -9,7 +9,6 @@ use vault_core::VaultError;
 /// Error codes that map to TypeScript `StorageErrorCode`
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[allow(dead_code)]
 pub enum ErrorCode {
     VaultNotFound,
     VaultNotOpen,
@@ -20,11 +19,7 @@ pub enum ErrorCode {
     PermissionDenied,
     ValidationError,
     NetworkError,
-    SyncConflict,
-    StorageFull,
-    EncryptionError,
     AuthError,
-    NotImplemented,
     UnknownError,
 }
 
@@ -40,11 +35,7 @@ impl std::fmt::Display for ErrorCode {
             Self::PermissionDenied => write!(f, "PERMISSION_DENIED"),
             Self::ValidationError => write!(f, "VALIDATION_ERROR"),
             Self::NetworkError => write!(f, "NETWORK_ERROR"),
-            Self::SyncConflict => write!(f, "SYNC_CONFLICT"),
-            Self::StorageFull => write!(f, "STORAGE_FULL"),
-            Self::EncryptionError => write!(f, "ENCRYPTION_ERROR"),
             Self::AuthError => write!(f, "AUTH_ERROR"),
-            Self::NotImplemented => write!(f, "NOT_IMPLEMENTED"),
             Self::UnknownError => write!(f, "UNKNOWN_ERROR"),
         }
     }
@@ -69,20 +60,6 @@ impl AppError {
             code: code.to_string(),
             message: message.into(),
             details: None,
-        }
-    }
-
-    /// Create a new error with additional details
-    #[allow(dead_code)]
-    pub fn with_details(
-        code: ErrorCode,
-        message: impl Into<String>,
-        details: serde_json::Value,
-    ) -> Self {
-        Self {
-            code: code.to_string(),
-            message: message.into(),
-            details: Some(details),
         }
     }
 
@@ -123,22 +100,12 @@ impl AppError {
         Self::new(ErrorCode::ValidationError, message)
     }
 
-    /// Create a "not implemented" error
-    #[allow(dead_code)]
-    pub fn not_implemented(feature: &str) -> Self {
-        Self::new(
-            ErrorCode::NotImplemented,
-            format!("{} is not yet implemented", feature),
-        )
-    }
-
     /// Create an "auth error"
     pub fn auth_error(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::AuthError, message)
     }
 
     /// Create an "unknown error"
-    #[allow(dead_code)]
     pub fn unknown(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::UnknownError, message)
     }
@@ -243,21 +210,8 @@ mod tests {
     }
 
     #[test]
-    fn test_error_with_details() {
-        let details = serde_json::json!({
-            "field": "title",
-            "reason": "too long"
-        });
-        let err = AppError::with_details(ErrorCode::ValidationError, "Invalid input", details);
-        let json = serde_json::to_string(&err).unwrap();
-        assert!(json.contains("VALIDATION_ERROR"));
-        assert!(json.contains("title"));
-    }
-
-    #[test]
     fn test_error_code_display() {
         assert_eq!(ErrorCode::VaultNotFound.to_string(), "VAULT_NOT_FOUND");
         assert_eq!(ErrorCode::ItemNotFound.to_string(), "ITEM_NOT_FOUND");
-        assert_eq!(ErrorCode::NotImplemented.to_string(), "NOT_IMPLEMENTED");
     }
 }

@@ -16,7 +16,7 @@ use crate::error::AppError;
 use crate::types::{
     FocusCandidate, FocusDay, FocusListCloseDayInput, FocusListCloseDayResult, FocusListDay,
     FocusListDayStats, FocusListEntry, FocusListGenerateInput, FocusListGetCurrentInput,
-    FocusListNavigationClickInput, FocusListNavigationResult, FocusVelocity, GoalTask, ProjectTask,
+    FocusListNavigationClickInput, FocusListNavigationResult, FocusVelocity, GoalTask,
 };
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -335,8 +335,7 @@ fn normalize_status(raw_status: Option<String>, relative_path: &str) -> String {
         .unwrap_or_else(|| "todo".to_string())
         .trim()
         .to_lowercase()
-        .replace('-', "_")
-        .replace(' ', "_");
+        .replace(['-', ' '], "_");
 
     match normalized.as_str() {
         "done" | "completed" | "complete" | "closed" => "done".to_string(),
@@ -825,7 +824,7 @@ pub async fn defer_focus_item(
     save_focus_day(vault_id, focus_day, state).await
 }
 
-/// Gather focus candidates from goals and projects
+/// Gather focus candidates from Goal Tasks.
 #[tauri::command]
 pub async fn gather_focus_candidates(
     vault_id: String,
@@ -843,16 +842,8 @@ pub async fn gather_focus_candidates(
     let candidates = collect_candidates_from_vault(&vault_id, &vault_name, &vault_path)?;
 
     log::info!(
-        "Found {} focus candidates ({} from goals, {} from projects)",
-        candidates.len(),
-        candidates
-            .iter()
-            .filter(|c| c.item_type == "goal_task")
-            .count(),
-        candidates
-            .iter()
-            .filter(|c| c.item_type == "project_task")
-            .count()
+        "Found {} focus candidates from Goal Tasks",
+        candidates.len()
     );
     Ok(candidates)
 }
@@ -878,7 +869,6 @@ fn collect_candidates_from_vault(
     vault_path: &str,
 ) -> Result<Vec<FocusCandidate>, AppError> {
     let goals_dir = PathBuf::from(vault_path).join("goals");
-    let projects_dir = PathBuf::from(vault_path).join("projects");
 
     let mut candidates = Vec::new();
 
@@ -982,89 +972,6 @@ fn collect_candidates_from_vault(
         }
     }
 
-    if projects_dir.exists() {
-        for project_entry in std::fs::read_dir(&projects_dir)? {
-            let project_entry = project_entry?;
-            let project_path = project_entry.path();
-
-            if !project_path.is_dir() {
-                continue;
-            }
-
-            let project_id = project_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("")
-                .to_string();
-
-            let project_file = project_path.join("project.md");
-            let project_title = if project_file.exists() {
-                std::fs::read_to_string(&project_file)
-                    .ok()
-                    .and_then(|content| {
-                        markdown_parser::parse_frontmatter(&content)
-                            .ok()
-                            .and_then(|(fm, _)| {
-                                fm.get("name")
-                                    .and_then(|v| v.as_str())
-                                    .map(|s| s.to_string())
-                            })
-                    })
-            } else {
-                None
-            };
-
-            let tasks_dir = project_path.join("tasks");
-            if !tasks_dir.exists() {
-                continue;
-            }
-
-            for task_entry in std::fs::read_dir(&tasks_dir)? {
-                let task_entry = task_entry?;
-                let task_path = task_entry.path();
-
-                if task_path.extension().map(|e| e == "md").unwrap_or(false) {
-                    if let Ok(content) = std::fs::read_to_string(&task_path) {
-                        if let Ok((fm, body)) = markdown_parser::parse_frontmatter(&content) {
-                            if let Ok(task) = ProjectTask::from_frontmatter(&fm, &body) {
-                                if !task.is_task {
-                                    continue;
-                                }
-                                if task.column == "done" || task.completed_at.is_some() {
-                                    continue;
-                                }
-
-                                candidates.push(FocusCandidate {
-                                    id: task.id.clone(),
-                                    item_type: "project_task".to_string(),
-                                    title: task.title,
-                                    points: task.points as u32,
-                                    priority: task.priority,
-                                    due_date: task.due_date,
-                                    blocks: vec![],
-                                    blocks_people: false,
-                                    in_current_sprint: false,
-                                    last_activity: None,
-                                    goal_id: None,
-                                    goal_title: None,
-                                    goal_objective: None,
-                                    project_id: Some(project_id.clone()),
-                                    project_title: project_title.clone(),
-                                    epic_title: None,
-                                    sprint_id: None,
-                                    board_column: Some(task.column.clone()),
-                                    vault_id: Some(vault_id.to_string()),
-                                    vault_name: Some(vault_name.to_string()),
-                                    workspace_id: task.workspace_id.clone(),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     Ok(candidates)
 }
 
@@ -1109,7 +1016,7 @@ pub async fn get_focus_velocity(
                             chrono::NaiveDate::parse_from_str(&focus_day.date, "%Y-%m-%d")
                         {
                             let days_ago = (today - date).num_days();
-                            if days_ago >= 0 && days_ago < 7 {
+                            if (0..7).contains(&days_ago) {
                                 weekly_trend[6 - days_ago as usize] = focus_day.completed_points;
                             }
                         }
@@ -1334,5 +1241,39 @@ pub async fn focus_list_navigate_to_task(
 
 #[cfg(test)]
 mod tests {
-    // Tests would require a Tauri runtime context
+    use super::collect_candidates_from_vault;
+    use tempfile::TempDir;
+
+    #[test]
+    fn collect_candidates_ignores_legacy_project_task_files_for_desktop_mvp() {
+        let temp = TempDir::new().unwrap();
+        let task_path = temp
+            .path()
+            .join("projects")
+            .join("project_1")
+            .join("tasks")
+            .join("task_1.md");
+        std::fs::create_dir_all(task_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &task_path,
+            r#"---
+id: task_1
+title: Legacy project task
+column: backlog
+points: 1
+priority: high
+is_task: true
+created: "2026-04-27T09:00:00Z"
+updated: "2026-04-27T09:00:00Z"
+---
+"#,
+        )
+        .unwrap();
+
+        let candidates =
+            collect_candidates_from_vault("vault_1", "Test Vault", temp.path().to_str().unwrap())
+                .unwrap();
+
+        assert!(candidates.is_empty());
+    }
 }

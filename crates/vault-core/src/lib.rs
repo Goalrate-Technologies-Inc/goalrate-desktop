@@ -5,7 +5,7 @@
 //! - Vault creation, opening, and closing
 //! - File system watching for external changes
 //! - Configuration management
-//! - Goal and project file operations
+//! - Goal, Agenda, Memory, and audit-log file operations
 //!
 //! # Vault Structure
 //!
@@ -14,14 +14,19 @@
 //! ├── .vault.json                   # Vault configuration
 //! ├── .goalrate/                    # Local app data
 //! │   └── index.db                  # SQLite index
+//! ├── domains/                      # Reserved domain metadata
 //! ├── goals/                        # Goal markdown files
 //! │   └── [goal-id].md             # Goal definition + milestones
-//! ├── projects/                     # Scrumban project directories
-//! │   └── [project-slug]/
-//! │       ├── project.md           # Project definition
-//! │       ├── epics/               # Epic definitions
-//! │       ├── sprints/             # Sprint definitions
-//! │       └── stories/             # User stories
+//! ├── tasks/                        # Reserved compatibility folder
+//! ├── agenda/                       # Daily agenda markdown files
+//! │   └── 2026-01-17.md
+//! ├── logs/                         # User-readable logs
+//! │   └── errors.md
+//! ├── system/                       # User-readable audit metadata
+//! │   ├── mutations.md
+//! │   └── snapshots/
+//! ├── memory.md                     # Persistent planning memory
+//! ├── eisenhower-matrix.md          # Prioritization notes
 //! └── focus/                        # Daily focus files
 //!     └── 2026-01-17.md
 //! ```
@@ -47,7 +52,10 @@ pub mod watcher;
 
 pub use config::VaultConfig;
 pub use error::{VaultError, VaultResult};
-pub use vault::{VaultManager, VaultStructure};
+pub use vault::{
+    SnapshotHistoryEntry, SnapshotPreview, SnapshotRestoreResult, VaultErrorLogEntry, VaultManager,
+    VaultStructure,
+};
 pub use watcher::{VaultEvent, VaultWatcher};
 
 /// Vault type determines sync and visibility behavior

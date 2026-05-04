@@ -6,6 +6,8 @@
 import type {
   StorageAdapter,
   StorageResult,
+  DeleteGoalOptions,
+  DeleteGoalTaskOptions,
   GoalQueryOptions,
   ProjectQueryOptions,
   SprintQueryOptions,
@@ -190,8 +192,12 @@ export class MockStorageAdapter implements StorageAdapter {
     return this.defaultResult as StorageResult<SmartGoal>;
   }
 
-  async deleteGoal(vaultId: string, goalId: string): Promise<StorageResult<void>> {
-    this.trackCall('deleteGoal', [vaultId, goalId]);
+  async deleteGoal(
+    vaultId: string,
+    goalId: string,
+    options: DeleteGoalOptions
+  ): Promise<StorageResult<void>> {
+    this.trackCall('deleteGoal', [vaultId, goalId, options]);
     return { success: true };
   }
 
@@ -237,9 +243,10 @@ export class MockStorageAdapter implements StorageAdapter {
   async deleteGoalTask(
     vaultId: string,
     goalId: string,
-    taskId: string
+    taskId: string,
+    options: DeleteGoalTaskOptions
   ): Promise<StorageResult<void>> {
-    this.trackCall('deleteGoalTask', [vaultId, goalId, taskId]);
+    this.trackCall('deleteGoalTask', [vaultId, goalId, taskId, options]);
     return { success: true };
   }
 

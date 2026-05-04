@@ -24,17 +24,18 @@ export type {
   ServiceResponse,
   ServiceError,
   StatusDisplayConfig,
-} from './common';
+} from "./common";
 
 export {
   PROJECT_STATUSES,
   getProjectStatusConfig,
   isValidProjectStatus,
   getNextStatus,
-} from './common';
+} from "./common";
 
-// Daily Loop types
+// Agenda types
 export type {
+  ScheduledTask,
   DailyPlan,
   Outcome,
   Deferral,
@@ -51,16 +52,16 @@ export type {
   DeferTaskInput,
   CreateCheckInInput,
   SendChatInput,
-  DailyLoopIpcCommandName,
-} from './daily-loop';
+  AgendaIpcCommandName,
+} from "./agenda";
 
-export { DAILY_LOOP_IPC_COMMANDS, DAILY_LOOP_AI_COMMANDS } from './daily-loop';
+export { AGENDA_IPC_COMMANDS, AGENDA_AI_COMMANDS } from "./agenda";
 
 export type {
   DeferralConfrontation,
   GeneratedPlanResponse,
   ChatReprioritizeResponse,
-} from './daily-loop';
+} from "./agenda";
 
 // User types
 export type {
@@ -89,7 +90,50 @@ export type {
   ProfileVisibility,
   AvatarUploadState,
   DateOfBirthState,
-} from './user';
+} from "./user";
+
+export type {
+  BackendFeatureKey,
+  BackendFeatureMatrix,
+  LaunchPlanId,
+  EntitlementKey,
+  EntitlementMatrix,
+  WorkspaceType,
+  WorkspaceMemberRole,
+  EntitlementPlanStatus,
+  EntitlementPlanSource,
+  EntitlementUser,
+  EntitlementWorkspace,
+  EntitlementEffectivePlan,
+  EntitlementWorkspacePlan,
+  WorkspaceFeatureMap,
+  EntitlementWorkspaceMembership,
+  EntitlementLimits,
+  EntitlementResponse,
+} from "./entitlements";
+
+export {
+  BACKEND_FEATURES,
+  LAUNCH_PLANS,
+  PLAN_ENTITLEMENTS,
+  PLAN_BACKEND_FEATURES,
+  ENTITLEMENT_FEATURE_KEYS,
+  APP_STORE_LAUNCH_PLANS,
+  APP_STORE_LAUNCH_ENTITLEMENTS,
+  isPlanId,
+  normalizePlanId,
+  isLaunchPlanId,
+  normalizeLaunchPlanId,
+  entitlementsForPlan,
+  hasEntitlement,
+  planAllowsAi,
+  backendFeaturesForPlan,
+  backendFeatureForEntitlement,
+  planHasBackendFeature,
+  entitlementResponseHasFeature,
+  entitlementResponseAllowsAi,
+  entitlementPlanLabel,
+} from "./entitlements";
 
 // Goal types
 export type {
@@ -102,7 +146,7 @@ export type {
   GoalCreate,
   GoalUpdate,
   DailyTask,
-} from './goal';
+} from "./goal";
 
 // Focus types
 export type {
@@ -143,13 +187,13 @@ export type {
   FocusIpcCommandName,
   FocusIpcPayloadByCommand,
   FocusIpcResultByCommand,
-} from './focus';
+} from "./focus";
 
 export {
   DEFAULT_FOCUS_CAPACITY_PROFILE,
   FOCUS_ELIGIBLE_TASK_STATUSES,
   FOCUS_IPC_COMMANDS,
-} from './focus';
+} from "./focus";
 
 // Vault types
 export type {
@@ -170,7 +214,7 @@ export type {
   VaultSyncConflict,
   VaultSearchResult,
   VaultStats,
-} from './vault';
+} from "./vault";
 
 // Project types
 export type {
@@ -198,9 +242,9 @@ export type {
   ProjectFilters,
   ProjectCustomField,
   ProjectSettings,
-} from './project';
+} from "./project";
 
-export { DEFAULT_BOARD_COLUMNS } from './project';
+export { DEFAULT_BOARD_COLUMNS } from "./project";
 
 // Epic types
 export type {
@@ -222,7 +266,7 @@ export type {
   EpicActivityAction,
   EpicActivity,
   EpicHierarchy,
-} from './epic';
+} from "./epic";
 
 // Task types
 export type {
@@ -237,9 +281,9 @@ export type {
   TaskHierarchy,
   TaskProgress,
   LegacyTask,
-} from './task';
+} from "./task";
 
-export { TASK_STATUSES, TASK_PRIORITIES, TASK_TYPES } from './task';
+export { TASK_STATUSES, TASK_PRIORITIES, TASK_TYPES } from "./task";
 
 // Sprint types
 export type {
@@ -257,7 +301,7 @@ export type {
   SprintGoalTracking,
   SprintKeyResult,
   EnhancedSprint,
-} from './sprint';
+} from "./sprint";
 
 // Workspace types
 export type {
@@ -286,7 +330,7 @@ export type {
   WorkspaceQuickAction,
   WorkspaceFilters,
   WorkspaceSearchResult,
-} from './workspace';
+} from "./workspace";
 
 export {
   ROLE_HIERARCHY,
@@ -294,7 +338,7 @@ export {
   isWorkspaceDeleted,
   isInvitationExpired,
   isInvitationAccepted,
-} from './workspace';
+} from "./workspace";
 
 // Activity types
 export type {
@@ -314,14 +358,10 @@ export type {
   BackendActivityData,
   ActivityFeedService,
   SystemReports,
-} from './activity';
+} from "./activity";
 
 // WebSocket types
-export {
-  ConnectionState,
-  MessageType,
-  TOPICS,
-} from './websocket';
+export { ConnectionState, MessageType, TOPICS } from "./websocket";
 
 export type {
   WebSocketMessage,
@@ -340,7 +380,7 @@ export type {
   SyncRejectReason,
   SyncRejectPayload,
   EntityChangedPayload,
-} from './websocket';
+} from "./websocket";
 
 // Analytics types
 export type {
@@ -362,7 +402,7 @@ export type {
   AnalyticsExportFormat,
   AnalyticsExportRequest,
   AnalyticsExportResponse,
-} from './analytics';
+} from "./analytics";
 
 // Health types
 export type {
@@ -373,9 +413,9 @@ export type {
   GoalHealthStatusInfo,
   ProjectHealthStatusInfo,
   HealthStatusConfig,
-} from './health';
+} from "./health";
 
-export { DEFAULT_HEALTH_CONFIG } from './health';
+export { DEFAULT_HEALTH_CONFIG } from "./health";
 
 // Prioritization types
 export type {
@@ -387,10 +427,10 @@ export type {
   QuadrantMetadata,
   ClassifyOptions,
   UrgencyThresholds,
-} from './prioritization';
+} from "./prioritization";
 
 export {
   QUADRANT_METADATA,
   DEFAULT_URGENCY_THRESHOLDS,
   PRIORITY_IMPORTANCE_SCORES,
-} from './prioritization';
+} from "./prioritization";

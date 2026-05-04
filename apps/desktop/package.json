@@ -18,7 +18,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:integration": "vitest run --config vitest.config.integration.ts",
+    "test:integration": "vitest run --config vitest.config.integration.ts --reporter verbose",
     "clean": "rm -rf dist src-tauri/target"
   },
   "dependencies": {
@@ -33,12 +33,7 @@
     "@goalrate-app/ui": "workspace:*",
     "@tauri-apps/api": "2.10.1",
     "@tauri-apps/plugin-dialog": "2.6.0",
-    "@tauri-apps/plugin-process": "2.3.1",
-    "@tauri-apps/plugin-shell": "2.3.5",
-    "@tauri-apps/plugin-updater": "2.10.1",
-    "canvas-confetti": "^1.9.4",
     "lucide-react": "^0.563.0",
-    "mermaid": "^11.12.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",

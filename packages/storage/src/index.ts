@@ -13,7 +13,7 @@
  * import { StorageProvider } from '@goalrate-app/storage/react';
  * import { createWebStorage } from '@goalrate-app/storage/web';
  *
- * const storage = createWebStorage('https://api.goalrate.app');
+ * const storage = createWebStorage('https://api.goalrate.com');
  *
  * function App() {
  *   return (

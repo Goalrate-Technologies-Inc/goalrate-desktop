@@ -9,6 +9,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import { beforeAll, afterAll } from 'vitest';
+import { hasTauriIpc } from './tauriIntegration';
 
 // Test vault configuration
 export const TEST_VAULT_PATH = '/tmp/goalrate-integration-test';
@@ -64,15 +65,17 @@ beforeAll(async () => {
   console.log('\n🔧 Integration Test Setup');
   console.log('━'.repeat(50));
 
+  if (!hasTauriIpc()) {
+    console.log('\n⚠️  Skipping integration tests - Tauri IPC is not available in this test process');
+    console.log('   Run these suites in a Tauri IPC-capable harness to exercise native commands.\n');
+    return;
+  }
+
   const isAvailable = await checkTauriBackend();
 
   if (!isAvailable) {
-    console.log('\n⚠️  Skipping integration tests - Tauri backend not available');
-    console.log('   Run the desktop app first: pnpm run dev:desktop\n');
-
-    // Skip all tests by throwing
     throw new Error(
-      'Tauri backend not available. Start the desktop app with: pnpm run dev:desktop'
+      'Tauri IPC is available, but the backend did not respond to the integration setup command'
     );
   }
 
@@ -85,6 +88,10 @@ beforeAll(async () => {
 
 // Global teardown
 afterAll(async () => {
+  if (!hasTauriIpc()) {
+    return;
+  }
+
   console.log('\n🧹 Integration Test Cleanup');
   console.log('━'.repeat(50));
 

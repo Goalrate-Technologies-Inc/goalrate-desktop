@@ -25,8 +25,6 @@ export {
   setupTauriInvokeMock,
   setupTauriEventMock,
   createWindowMock,
-  createUpdaterMock,
-  createProcessMock,
   commandResponses,
   type TauriInvokeMock,
   type TauriEventMock,

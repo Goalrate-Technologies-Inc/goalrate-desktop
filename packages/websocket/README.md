@@ -44,7 +44,7 @@ This package is part of the Goalrate monorepo and is automatically available to 
 import { WebSocketManager } from '@goalrate-app/websocket';
 
 const ws = new WebSocketManager({
-  url: 'wss://api.goalrate.app/ws',
+  url: 'wss://api.goalrate.com/ws',
   userId: 'user_123',
   authToken: 'jwt-token',
 });
@@ -80,7 +80,7 @@ function App() {
   return (
     <WebSocketProvider
       config={{
-        url: 'wss://api.goalrate.app/ws',
+        url: 'wss://api.goalrate.com/ws',
         userId: user.id,
         authToken: token,
       }}
@@ -115,7 +115,7 @@ import { WebSocketManager, ConnectionState, MessageType } from '@goalrate-app/we
 
 // Configuration
 const ws = new WebSocketManager({
-  url: 'wss://api.goalrate.app/ws',
+  url: 'wss://api.goalrate.com/ws',
   userId: 'user_123',
   authToken: 'jwt-token',
 
@@ -171,7 +171,7 @@ import { WebSocketProvider, WebSocketContext } from '@goalrate-app/websocket/rea
 
 <WebSocketProvider
   config={{
-    url: 'wss://api.goalrate.app/ws',
+    url: 'wss://api.goalrate.com/ws',
     userId: user.id,
     authToken: token,
   }}

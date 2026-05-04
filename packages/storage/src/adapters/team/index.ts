@@ -8,7 +8,7 @@
  *
  * // Create a team storage adapter
  * const storage = createTeamStorage({
- *   baseUrl: 'https://api.goalrate.app',
+ *   baseUrl: 'https://api.goalrate.com',
  * });
  *
  * // Set authentication token
@@ -157,7 +157,7 @@ import { TeamStorageAdapter } from './TeamStorageAdapter';
  * @example
  * ```typescript
  * const storage = createTeamStorage({
- *   baseUrl: 'https://api.goalrate.app',
+ *   baseUrl: 'https://api.goalrate.com',
  *   maxQueueSize: 100,
  *   operationTimeout: 10 * 60 * 1000, // 10 minutes
  *   onLockRequired: (vaultId) => {

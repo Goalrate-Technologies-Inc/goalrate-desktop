@@ -8,9 +8,16 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+    alias: [
+      {
+        find: /^@goalrate-app\/shared$/,
+        replacement: path.resolve(__dirname, "../../packages/shared/src/index.ts"),
+      },
+      {
+        find: "@",
+        replacement: path.resolve(__dirname, "./src"),
+      },
+    ],
   },
   // Prevent vite from obscuring rust errors
   clearScreen: false,

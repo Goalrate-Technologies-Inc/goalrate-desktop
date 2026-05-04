@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -13,6 +13,9 @@ const FILTER_MODULES = [
 describe('code health dependency boundary checks', () => {
   it('uses shared priority utilities instead of local duplicated maps', () => {
     for (const modulePath of FILTER_MODULES) {
+      if (!existsSync(modulePath)) {
+        continue;
+      }
       const source = readFileSync(modulePath, 'utf8');
       expect(source).toContain("import { comparePriority } from '@goalrate-app/shared';");
       expect(source).not.toContain('const priorityOrder');

@@ -117,7 +117,7 @@ export class VaultClient {
   }
 
   /**
-   * Enable sync for a vault (Pro+ feature)
+   * Enable sync for a vault (Pro and higher)
    */
   async enableSync(vaultId: string): Promise<VaultConfig> {
     const response = await this.http.post<VaultConfig>(

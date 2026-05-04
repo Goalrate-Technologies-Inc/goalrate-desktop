@@ -4,7 +4,7 @@
 
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::Mutex;
 use std::thread::JoinHandle;
@@ -12,10 +12,15 @@ use std::time::{Duration, Instant};
 use tauri::State;
 use tauri::{AppHandle, Emitter};
 
-use vault_core::{VaultManager, VaultType};
+use vault_core::{
+    SnapshotHistoryEntry, SnapshotPreview, SnapshotRestoreResult, VaultErrorLogEntry, VaultManager,
+    VaultType,
+};
 
 use crate::error::AppError;
 use crate::types::{VaultConfig, VaultCreate, VaultListItem, VaultStats};
+
+const MAX_PENDING_LIBRARY_UPDATE_PATHS: usize = 256;
 
 // =============================================================================
 // Application State
@@ -45,7 +50,10 @@ struct AiCacheEntry {
     created_at: Instant,
 }
 
-/// In-memory AI response cache to avoid duplicate API calls during development.
+/// Optional in-memory AI response cache for explicit development use.
+///
+/// Disabled by default so AI context remains file-backed/transient instead of
+/// accumulating provider responses in app RAM.
 pub struct AiCache {
     entries: HashMap<u64, AiCacheEntry>,
     ttl: Duration,
@@ -56,7 +64,7 @@ impl AiCache {
         let ttl_secs: u64 = std::env::var("GOALRATE_AI_CACHE_TTL")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(1800); // 30 minutes default
+            .unwrap_or(0);
         Self {
             entries: HashMap::new(),
             ttl: Duration::from_secs(ttl_secs),
@@ -112,6 +120,10 @@ impl AiCache {
             },
         );
     }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
 }
 
 /// Application state shared across Tauri commands
@@ -120,7 +132,7 @@ pub struct AppState {
     pub vaults: Mutex<HashMap<String, VaultManager>>,
     /// Map of vault_id -> active filesystem watcher handles
     library_watchers: Mutex<HashMap<String, LibraryWatcherHandle>>,
-    /// AI response cache to reduce API token usage during development
+    /// Optional AI response cache, disabled unless GOALRATE_AI_CACHE_TTL is set
     pub ai_cache: Mutex<AiCache>,
 }
 
@@ -148,11 +160,122 @@ impl Default for AppState {
     }
 }
 
-fn should_emit_library_update(event: &Event) -> bool {
+fn vault_relative_event_path(root: &Path, path: &Path) -> Option<String> {
+    let relative = path.strip_prefix(root).ok()?;
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+
+    let mut parts = Vec::new();
+    for component in relative.components() {
+        match component {
+            Component::Normal(part) => parts.push(part.to_string_lossy().to_string()),
+            _ => return None,
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("/"))
+    }
+}
+
+fn is_ignored_library_update_path(path: &str) -> bool {
+    path == ".goalrate"
+        || path.starts_with(".goalrate/")
+        || path == ".git"
+        || path.starts_with(".git/")
+}
+
+fn vault_relative_event_paths(root: &Path, event: &Event) -> Vec<String> {
+    let mut paths = Vec::new();
+    for path in &event.paths {
+        if let Some(relative_path) = vault_relative_event_path(root, path) {
+            if is_ignored_library_update_path(&relative_path) {
+                continue;
+            }
+            if !paths.contains(&relative_path) {
+                paths.push(relative_path);
+            }
+        }
+    }
+    paths
+}
+
+fn should_emit_library_update(root: &Path, event: &Event) -> bool {
     matches!(
         event.kind,
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
-    )
+    ) && !vault_relative_event_paths(root, event).is_empty()
+}
+
+struct LibraryUpdateDebounce {
+    debounce: Duration,
+    pending_since: Option<Instant>,
+    pending_paths: Vec<String>,
+    broad_refresh_pending: bool,
+}
+
+impl LibraryUpdateDebounce {
+    fn new(debounce: Duration) -> Self {
+        Self {
+            debounce,
+            pending_since: None,
+            pending_paths: Vec::new(),
+            broad_refresh_pending: false,
+        }
+    }
+
+    fn record_event(&mut self, paths: Vec<String>, now: Instant) {
+        if self.pending_since.is_none() {
+            self.pending_since = Some(now);
+        }
+
+        if paths.is_empty() {
+            self.broad_refresh_pending = true;
+            self.pending_paths.clear();
+            return;
+        }
+
+        if self.broad_refresh_pending {
+            return;
+        }
+
+        for path in paths {
+            if !self.pending_paths.contains(&path) {
+                if self.pending_paths.len() >= MAX_PENDING_LIBRARY_UPDATE_PATHS {
+                    self.broad_refresh_pending = true;
+                    self.pending_paths.clear();
+                    return;
+                }
+                self.pending_paths.push(path);
+            }
+        }
+    }
+
+    fn timeout(&self, now: Instant) -> Duration {
+        match self.pending_since {
+            Some(since) => self.debounce.saturating_sub(now.duration_since(since)),
+            None => Duration::from_millis(300),
+        }
+    }
+
+    fn take_due_paths(&mut self, now: Instant) -> Option<Vec<String>> {
+        let since = self.pending_since?;
+        if now.duration_since(since) < self.debounce {
+            return None;
+        }
+
+        self.pending_since = None;
+        if self.broad_refresh_pending {
+            self.broad_refresh_pending = false;
+            self.pending_paths.clear();
+            return Some(Vec::new());
+        }
+
+        Some(std::mem::take(&mut self.pending_paths))
+    }
 }
 
 fn stop_library_watcher(vault_id: &str, state: &AppState) {
@@ -204,29 +327,33 @@ fn start_library_watcher(
     let (stop_tx, stop_rx) = channel();
     let app = app_handle.clone();
     let watcher_vault_id = vault_id.to_string();
+    let watcher_root = path.clone();
     let thread = std::thread::spawn(move || {
         let _watcher = watcher;
-        let mut last_emit: Option<Instant> = None;
+        let mut debounce = LibraryUpdateDebounce::new(Duration::from_millis(150));
         loop {
             if stop_rx.try_recv().is_ok() {
                 break;
             }
 
-            match event_rx.recv_timeout(Duration::from_millis(300)) {
+            if let Some(paths) = debounce.take_due_paths(Instant::now()) {
+                let _ = app.emit(
+                    "vault-library-updated",
+                    serde_json::json!({
+                        "vaultId": watcher_vault_id,
+                        "paths": paths,
+                    }),
+                );
+                continue;
+            }
+
+            match event_rx.recv_timeout(debounce.timeout(Instant::now())) {
                 Ok(Ok(event)) => {
-                    if !should_emit_library_update(&event) {
+                    if !should_emit_library_update(&watcher_root, &event) {
                         continue;
                     }
-                    if let Some(last) = last_emit {
-                        if last.elapsed() < Duration::from_millis(150) {
-                            continue;
-                        }
-                    }
-                    last_emit = Some(Instant::now());
-                    let _ = app.emit(
-                        "vault-library-updated",
-                        serde_json::json!({ "vaultId": watcher_vault_id }),
-                    );
+                    let paths = vault_relative_event_paths(&watcher_root, &event);
+                    debounce.record_event(paths, Instant::now());
                 }
                 Ok(Err(err)) => {
                     log::warn!(
@@ -311,12 +438,53 @@ fn remove_registry_entry(vault_id: &str) -> Result<(), AppError> {
     save_registry(&entries)
 }
 
-fn resolve_vault_name(path: &PathBuf) -> String {
+fn resolve_vault_name(path: &Path) -> String {
     path.file_name()
         .and_then(|value| value.to_str())
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("Vault")
         .to_string()
+}
+
+fn resolve_vault_issue_path(root: &Path, path: &str) -> Result<PathBuf, AppError> {
+    let relative = Path::new(path);
+    if relative.is_absolute() {
+        return Err(AppError::validation_error(
+            "Vault issue path must be vault-relative",
+        ));
+    }
+
+    let mut clean = PathBuf::new();
+    for component in relative.components() {
+        match component {
+            Component::Normal(part) => clean.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::Prefix(_) | Component::RootDir => {
+                return Err(AppError::validation_error(
+                    "Vault issue path must stay inside the vault",
+                ));
+            }
+        }
+    }
+
+    if clean.as_os_str().is_empty() {
+        return Err(AppError::validation_error(
+            "Vault issue path cannot be empty",
+        ));
+    }
+    if clean.extension().and_then(|value| value.to_str()) != Some("md") {
+        return Err(AppError::validation_error(
+            "Vault issue path must point to a markdown file",
+        ));
+    }
+
+    let resolved = root.join(clean);
+    if !resolved.starts_with(root) {
+        return Err(AppError::validation_error(
+            "Vault issue path must stay inside the vault",
+        ));
+    }
+    Ok(resolved)
 }
 
 fn relocate_vault(
@@ -376,6 +544,7 @@ fn relocate_vault(
         let mut vaults = state.vaults.lock().unwrap();
         vaults.insert(vault_id.to_string(), manager);
     }
+    crate::commands::agenda::release_agenda_state(vault_id, state.inner())?;
     start_library_watcher(vault_id, &updated_path, &app, state.inner())?;
 
     Ok(VaultConfig::from(
@@ -532,6 +701,7 @@ pub async fn close_vault(vault_id: String, state: State<'_, AppState>) -> Result
     }
 
     stop_library_watcher(&vault_id, state.inner());
+    crate::commands::agenda::release_agenda_state(&vault_id, state.inner())?;
 
     Ok(())
 }
@@ -546,6 +716,7 @@ pub async fn delete_vault(vault_id: String, state: State<'_, AppState>) -> Resul
     vaults.remove(&vault_id);
     drop(vaults);
     stop_library_watcher(&vault_id, state.inner());
+    crate::commands::agenda::release_agenda_state(&vault_id, state.inner())?;
 
     // Remove from registry
     remove_registry_entry(&vault_id)?;
@@ -611,9 +782,9 @@ pub async fn get_vault_stats(
     let okr_ids = manager.list_goals().unwrap_or_default();
     let okr_count = okr_ids.len();
 
-    // Count projects
-    let project_ids = manager.list_projects().unwrap_or_default();
-    let project_count = project_ids.len();
+    // Desktop MVP does not expose standalone Projects; keep the legacy stats
+    // field stable for callers while reporting the project surface as inert.
+    let project_count = 0;
 
     // Count tasks (would need to iterate through OKRs)
     // For now, return 0 - can be enhanced later
@@ -627,6 +798,169 @@ pub async fn get_vault_stats(
         total_tasks,
         completed_tasks,
     })
+}
+
+/// Restore the latest logged markdown snapshot for an open vault.
+#[tauri::command]
+pub async fn restore_latest_vault_snapshot(
+    vault_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<SnapshotRestoreResult>, AppError> {
+    log::info!("Restoring latest snapshot for vault '{}'", vault_id);
+
+    let result = {
+        let vaults = state.vaults.lock().unwrap();
+        let manager = vaults
+            .get(&vault_id)
+            .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+        manager.restore_latest_snapshot("user")?
+    };
+
+    if result.is_some() {
+        let _ = app.emit(
+            "vault-library-updated",
+            serde_json::json!({ "vaultId": vault_id }),
+        );
+    }
+
+    Ok(result)
+}
+
+/// List restorable markdown snapshots for an open vault.
+#[tauri::command]
+pub async fn list_vault_snapshots(
+    vault_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<SnapshotHistoryEntry>, AppError> {
+    log::info!("Listing snapshots for vault '{}'", vault_id);
+
+    let vaults = state.vaults.lock().unwrap();
+    let manager = vaults
+        .get(&vault_id)
+        .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+
+    Ok(manager.list_snapshot_history()?)
+}
+
+/// List recent parse and validation issues from `logs/errors.md` for an open vault.
+#[tauri::command]
+pub async fn list_vault_error_log_entries(
+    vault_id: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<VaultErrorLogEntry>, AppError> {
+    log::info!("Listing error log entries for vault '{}'", vault_id);
+
+    let vaults = state.vaults.lock().unwrap();
+    let manager = vaults
+        .get(&vault_id)
+        .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+
+    Ok(manager.list_error_log_entries(limit.unwrap_or(5))?)
+}
+
+/// Open the current vault's user-readable error log.
+#[tauri::command]
+pub async fn open_vault_error_log(
+    vault_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    log::info!("Opening error log for vault '{}'", vault_id);
+
+    let error_log_path = {
+        let vaults = state.vaults.lock().unwrap();
+        let manager = vaults
+            .get(&vault_id)
+            .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+        manager.ensure_v1_markdown_structure()?;
+        manager.structure().error_log.clone()
+    };
+
+    open::that(&error_log_path)
+        .map_err(|err| AppError::unknown(format!("Failed to open logs/errors.md: {err}")))?;
+
+    Ok(())
+}
+
+/// Open a markdown file referenced by `logs/errors.md`.
+#[tauri::command]
+pub async fn open_vault_issue_file(
+    vault_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    log::info!("Opening issue file '{}' for vault '{}'", path, vault_id);
+
+    let issue_path = {
+        let vaults = state.vaults.lock().unwrap();
+        let manager = vaults
+            .get(&vault_id)
+            .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+        resolve_vault_issue_path(&manager.structure().root, &path)?
+    };
+
+    if !issue_path.is_file() {
+        return Err(AppError::item_not_found("Vault issue file", &path));
+    }
+
+    open::that(&issue_path)
+        .map_err(|err| AppError::unknown(format!("Failed to open {path}: {err}")))?;
+
+    Ok(())
+}
+
+/// Preview a specific logged markdown snapshot for an open vault.
+#[tauri::command]
+pub async fn preview_vault_snapshot(
+    vault_id: String,
+    snapshot_path: String,
+    state: State<'_, AppState>,
+) -> Result<Option<SnapshotPreview>, AppError> {
+    log::info!(
+        "Previewing snapshot '{}' for vault '{}'",
+        snapshot_path,
+        vault_id
+    );
+
+    let vaults = state.vaults.lock().unwrap();
+    let manager = vaults
+        .get(&vault_id)
+        .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+
+    Ok(manager.preview_snapshot(&snapshot_path)?)
+}
+
+/// Restore a specific logged markdown snapshot for an open vault.
+#[tauri::command]
+pub async fn restore_vault_snapshot(
+    vault_id: String,
+    snapshot_path: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<SnapshotRestoreResult>, AppError> {
+    log::info!(
+        "Restoring snapshot '{}' for vault '{}'",
+        snapshot_path,
+        vault_id
+    );
+
+    let result = {
+        let vaults = state.vaults.lock().unwrap();
+        let manager = vaults
+            .get(&vault_id)
+            .ok_or_else(|| AppError::vault_not_open(&vault_id))?;
+        manager.restore_snapshot(&snapshot_path, "user")?
+    };
+
+    if result.is_some() {
+        let _ = app.emit(
+            "vault-library-updated",
+            serde_json::json!({ "vaultId": vault_id }),
+        );
+    }
+
+    Ok(result)
 }
 
 /// Link a vault to a user account
@@ -712,6 +1046,15 @@ pub async fn set_vault_sync(vault_id: String, enabled: bool) -> Result<(), AppEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use notify::event::ModifyKind;
+
+    fn make_event(paths: Vec<PathBuf>) -> Event {
+        Event {
+            kind: EventKind::Modify(ModifyKind::Any),
+            paths,
+            attrs: Default::default(),
+        }
+    }
 
     #[test]
     fn test_create_and_open_vault_payload() {
@@ -731,5 +1074,131 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains("goalrate-test-vault"));
+    }
+
+    #[test]
+    fn resolves_vault_issue_markdown_paths_inside_root() {
+        let root = PathBuf::from("/tmp/goalrate-vault");
+
+        let resolved = resolve_vault_issue_path(&root, "goals/launch.md").unwrap();
+
+        assert_eq!(resolved, root.join("goals/launch.md"));
+    }
+
+    #[test]
+    fn rejects_vault_issue_paths_outside_root_or_non_markdown() {
+        let root = PathBuf::from("/tmp/goalrate-vault");
+
+        assert!(resolve_vault_issue_path(&root, "../secret.md").is_err());
+        assert!(resolve_vault_issue_path(&root, "/tmp/secret.md").is_err());
+        assert!(resolve_vault_issue_path(&root, "goals/launch.txt").is_err());
+        assert!(resolve_vault_issue_path(&root, "").is_err());
+    }
+
+    #[test]
+    fn library_update_paths_are_vault_relative() {
+        let root = PathBuf::from("/tmp/goalrate-vault");
+        let event = make_event(vec![
+            root.join("agenda/2026-04-26.md"),
+            root.join("logs/errors.md"),
+        ]);
+
+        assert_eq!(
+            vault_relative_event_paths(&root, &event),
+            vec![
+                "agenda/2026-04-26.md".to_string(),
+                "logs/errors.md".to_string(),
+            ],
+        );
+    }
+
+    #[test]
+    fn library_update_paths_skip_paths_outside_vault() {
+        let root = PathBuf::from("/tmp/goalrate-vault");
+        let event = make_event(vec![
+            root.join("goals/launch.md"),
+            PathBuf::from("/tmp/other-vault/goals/other.md"),
+        ]);
+
+        assert_eq!(
+            vault_relative_event_paths(&root, &event),
+            vec!["goals/launch.md".to_string()],
+        );
+    }
+
+    #[test]
+    fn library_update_ignores_internal_cache_paths() {
+        let root = PathBuf::from("/tmp/goalrate-vault");
+        let event = make_event(vec![
+            root.join(".goalrate/agenda.db-wal"),
+            root.join(".goalrate/index.db"),
+        ]);
+
+        assert_eq!(
+            vault_relative_event_paths(&root, &event),
+            Vec::<String>::new()
+        );
+        assert!(!should_emit_library_update(&root, &event));
+    }
+
+    #[test]
+    fn library_update_debounce_accumulates_paths_before_emit() {
+        let start = Instant::now();
+        let mut debounce = LibraryUpdateDebounce::new(Duration::from_millis(150));
+
+        debounce.record_event(vec!["logs/errors.md".to_string()], start);
+        debounce.record_event(
+            vec!["agenda/2026-04-26.md".to_string()],
+            start + Duration::from_millis(50),
+        );
+
+        assert_eq!(
+            debounce.take_due_paths(start + Duration::from_millis(149)),
+            None,
+        );
+        assert_eq!(
+            debounce.take_due_paths(start + Duration::from_millis(150)),
+            Some(vec![
+                "logs/errors.md".to_string(),
+                "agenda/2026-04-26.md".to_string(),
+            ]),
+        );
+        assert_eq!(
+            debounce.take_due_paths(start + Duration::from_millis(300)),
+            None,
+        );
+    }
+
+    #[test]
+    fn library_update_debounce_keeps_unknown_path_event_as_broad_refresh() {
+        let start = Instant::now();
+        let mut debounce = LibraryUpdateDebounce::new(Duration::from_millis(150));
+
+        debounce.record_event(vec!["logs/errors.md".to_string()], start);
+        debounce.record_event(Vec::new(), start + Duration::from_millis(25));
+        debounce.record_event(
+            vec!["agenda/2026-04-26.md".to_string()],
+            start + Duration::from_millis(50),
+        );
+
+        assert_eq!(
+            debounce.take_due_paths(start + Duration::from_millis(150)),
+            Some(Vec::new()),
+        );
+    }
+
+    #[test]
+    fn library_update_debounce_caps_path_accumulation() {
+        let start = Instant::now();
+        let mut debounce = LibraryUpdateDebounce::new(Duration::from_millis(150));
+
+        for index in 0..=MAX_PENDING_LIBRARY_UPDATE_PATHS {
+            debounce.record_event(vec![format!("goals/goal-{index}.md")], start);
+        }
+
+        assert_eq!(
+            debounce.take_due_paths(start + Duration::from_millis(150)),
+            Some(Vec::new()),
+        );
     }
 }

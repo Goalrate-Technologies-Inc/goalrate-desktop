@@ -20,7 +20,7 @@ This package is part of the Goalrate monorepo and is automatically available to 
 import { GoalrateClient } from '@goalrate-app/api-client';
 
 const client = new GoalrateClient({
-  baseUrl: 'https://api.goalrate.app',
+  baseUrl: 'https://api.goalrate.com',
   accessToken: localStorage.getItem('token'),
   onTokenRefresh: (access, refresh) => {
     localStorage.setItem('access_token', access);
@@ -47,7 +47,7 @@ import { GoalrateClient, createGoalrateClient } from '@goalrate-app/api-client';
 
 // Constructor
 const client = new GoalrateClient({
-  baseUrl: 'https://api.goalrate.app',
+  baseUrl: 'https://api.goalrate.com',
   accessToken: 'initial-token',
   refreshToken: 'refresh-token',
   timeout: 30000,           // Request timeout (default: 30s)
@@ -60,7 +60,7 @@ const client = new GoalrateClient({
 });
 
 // Or use factory function
-const client = createGoalrateClient({ baseUrl: 'https://api.goalrate.app' });
+const client = createGoalrateClient({ baseUrl: 'https://api.goalrate.com' });
 
 // Token management
 client.setAccessToken(token);
@@ -376,14 +376,14 @@ const subscription = await client.subscriptions.getCurrent();
 
 // Get available plans
 const plans = await client.subscriptions.getPlans();
-// Returns: { pro_monthly, pro_yearly, team_monthly, team_yearly, ... }
+// Returns plans in Free, Plus, Pro, Premium order.
 
 // Create checkout session
 const { checkout_url } = await client.subscriptions.createCheckout({
-  plan: 'pro',
+  plan: 'plus',
   billing_cycle: 'yearly',
-  success_url: 'https://app.goalrate.app/subscription/success',
-  cancel_url: 'https://app.goalrate.app/pricing',
+  success_url: 'https://goalrate.com/subscription/success',
+  cancel_url: 'https://goalrate.com/pricing',
 });
 
 // Cancel subscription
@@ -397,7 +397,7 @@ await client.subscriptions.applyPromo({ code: 'LAUNCH50' });
 
 // Change plan
 await client.subscriptions.changePlan({
-  plan: 'team',
+  plan: 'premium',
   billing_cycle: 'monthly',
 });
 
@@ -479,7 +479,7 @@ For custom requests not covered by feature clients:
 import { HttpClient, createHttpClient } from '@goalrate-app/api-client';
 
 const http = createHttpClient({
-  baseUrl: 'https://api.goalrate.app',
+  baseUrl: 'https://api.goalrate.com',
   timeout: 30000,
 });
 

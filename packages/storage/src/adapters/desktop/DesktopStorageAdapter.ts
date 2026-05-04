@@ -10,6 +10,8 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   StorageAdapter,
   StorageResult,
+  DeleteGoalOptions,
+  DeleteGoalTaskOptions,
   GoalQueryOptions,
   ProjectQueryOptions,
   SprintQueryOptions,
@@ -185,8 +187,12 @@ export class DesktopStorageAdapter implements StorageAdapter {
     return invokeCommand<SmartGoal>('update_goal', { vaultId, goalId, data });
   }
 
-  async deleteGoal(vaultId: string, goalId: string): Promise<StorageResult<void>> {
-    return invokeCommand<void>('delete_goal', { vaultId, goalId });
+  async deleteGoal(
+    vaultId: string,
+    goalId: string,
+    options: DeleteGoalOptions
+  ): Promise<StorageResult<void>> {
+    return invokeCommand<void>('delete_goal', { vaultId, goalId, confirmed: options.confirmed });
   }
 
   async archiveGoal(vaultId: string, goalId: string): Promise<StorageResult<SmartGoal>> {
@@ -229,9 +235,15 @@ export class DesktopStorageAdapter implements StorageAdapter {
   async deleteGoalTask(
     vaultId: string,
     goalId: string,
-    taskId: string
+    taskId: string,
+    options: DeleteGoalTaskOptions
   ): Promise<StorageResult<void>> {
-    return invokeCommand<void>('delete_goal_task', { vaultId, goalId, taskId });
+    return invokeCommand<void>('delete_goal_task', {
+      vaultId,
+      goalId,
+      taskId,
+      confirmed: options.confirmed,
+    });
   }
 
   async moveGoalTask(

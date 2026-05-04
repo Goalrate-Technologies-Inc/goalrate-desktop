@@ -18,11 +18,10 @@ tauri-build = { version = "2.5", features = [] }
 [dependencies]
 # Tauri
 tauri = { version = "2.10", features = [] }
-tauri-plugin-shell = "2.3"
 tauri-plugin-window-state = "2.4"
-tauri-plugin-updater = "2.10"
-tauri-plugin-process = "2.3"
 tauri-plugin-dialog = "2.6"
+tauri-plugin-fs = "2.4"
+tauri-plugin-persisted-scope = "2.3"
 tauri-plugin-global-shortcut = "2.3"
 
 # Workspace crates
@@ -30,7 +29,7 @@ vault-core = { path = "../../../crates/vault-core" }
 markdown-parser = { path = "../../../crates/markdown-parser" }
 sqlite-index = { path = "../../../crates/sqlite-index" }
 focus-engine = { path = "../../../crates/focus-engine" }
-daily-loop = { path = "../../../crates/daily-loop" }
+agenda = { path = "../../../crates/agenda" }
 goalrate-crypto = { path = "../../../crates/crypto" }
 
 # Workspace dependencies
@@ -54,3 +53,6 @@ keyring = { version = "3", features = ["apple-native"] }
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+tempfile.workspace = true

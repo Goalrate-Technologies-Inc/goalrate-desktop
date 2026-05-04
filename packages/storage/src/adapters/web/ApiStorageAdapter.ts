@@ -7,6 +7,8 @@ import type {
   StorageAdapter,
   StorageResult,
   StorageError,
+  DeleteGoalOptions,
+  DeleteGoalTaskOptions,
   GoalQueryOptions,
   ProjectQueryOptions,
   FocusQueryOptions,
@@ -241,7 +243,20 @@ export class ApiStorageAdapter implements StorageAdapter {
     }
   }
 
-  async deleteGoal(vaultId: string, goalId: string): Promise<StorageResult<void>> {
+  async deleteGoal(
+    vaultId: string,
+    goalId: string,
+    options: DeleteGoalOptions
+  ): Promise<StorageResult<void>> {
+    if (!options.confirmed) {
+      return wrapError(
+        createStorageError(
+          'VALIDATION_ERROR',
+          'Deleting a goal requires explicit confirmation'
+        )
+      );
+    }
+
     try {
       await this.client.delete(`/api/vaults/${vaultId}/goals/${goalId}`);
       return wrapSuccess(undefined);
@@ -320,8 +335,18 @@ export class ApiStorageAdapter implements StorageAdapter {
   async deleteGoalTask(
     vaultId: string,
     goalId: string,
-    taskId: string
+    taskId: string,
+    options: DeleteGoalTaskOptions
   ): Promise<StorageResult<void>> {
+    if (!options.confirmed) {
+      return wrapError(
+        createStorageError(
+          'VALIDATION_ERROR',
+          'Deleting a goal task requires explicit confirmation'
+        )
+      );
+    }
+
     try {
       await this.client.delete(`/api/vaults/${vaultId}/goals/${goalId}/tasks/${taskId}`);
       return wrapSuccess(undefined);

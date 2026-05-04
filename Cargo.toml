@@ -5,7 +5,7 @@ members = [
     "crates/markdown-parser",
     "crates/sqlite-index",
     "crates/focus-engine",
-    "crates/daily-loop",
+    "crates/agenda",
     "crates/crypto",
     # Desktop app Tauri backend
     "apps/desktop/src-tauri",

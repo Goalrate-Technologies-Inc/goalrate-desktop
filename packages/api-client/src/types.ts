@@ -2,7 +2,7 @@
  * Configuration options for the GoalrateClient
  */
 export interface GoalrateClientConfig {
-  /** Base URL for API requests (e.g., 'https://api.goalrate.app') */
+  /** Base URL for API requests (e.g., 'https://api.goalrate.com') */
   baseUrl: string;
 
   /** Optional initial access token for authentication */

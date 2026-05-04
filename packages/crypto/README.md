@@ -212,7 +212,7 @@ import {
 
 // Initialize manager
 const manager = new KeySharingManager({
-  apiBaseUrl: 'https://api.goalrate.app',
+  apiBaseUrl: 'https://api.goalrate.com',
   getAuthToken: () => localStorage.getItem('token'),
 });
 

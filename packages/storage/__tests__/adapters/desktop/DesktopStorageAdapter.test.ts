@@ -237,9 +237,9 @@ describe('DesktopStorageAdapter', () => {
       it('should invoke delete_goal with vaultId and goalId', async () => {
         mockInvoke.mockResolvedValue(undefined);
 
-        const result = await adapter.deleteGoal('vault_1', 'goal_1');
+        const result = await adapter.deleteGoal('vault_1', 'goal_1', { confirmed: true });
 
-        expect(mockInvoke).toHaveBeenCalledWith('delete_goal', { vaultId: 'vault_1', goalId: 'goal_1' });
+        expect(mockInvoke).toHaveBeenCalledWith('delete_goal', { vaultId: 'vault_1', goalId: 'goal_1', confirmed: true });
         expect(result.success).toBe(true);
       });
     });
@@ -329,12 +329,15 @@ describe('DesktopStorageAdapter', () => {
       it('should invoke delete_goal_task', async () => {
         mockInvoke.mockResolvedValue(undefined);
 
-        const result = await adapter.deleteGoalTask('vault_1', 'goal_1', 'task_1');
+        const result = await adapter.deleteGoalTask('vault_1', 'goal_1', 'task_1', {
+          confirmed: true,
+        });
 
         expect(mockInvoke).toHaveBeenCalledWith('delete_goal_task', {
           vaultId: 'vault_1',
           goalId: 'goal_1',
           taskId: 'task_1',
+          confirmed: true,
         });
         expect(result.success).toBe(true);
       });

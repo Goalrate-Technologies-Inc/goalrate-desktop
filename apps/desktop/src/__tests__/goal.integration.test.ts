@@ -8,9 +8,10 @@
  * Run with: pnpm run test:integration
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { it, expect, beforeAll, afterAll } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import type { VaultConfig, SmartGoal, GoalTask } from '@goalrate-app/shared';
+import { describeTauriIntegration as describe } from '../test/tauriIntegration';
 
 // Test vault configuration
 const TEST_VAULT_PATH = '/tmp/goalrate-integration-test-goals';
@@ -141,7 +142,7 @@ describe('Goal Operations (Integration)', () => {
       });
 
       // Delete it
-      await invoke('delete_goal', { vaultId, goalId: goal.id });
+      await invoke('delete_goal', { vaultId, goalId: goal.id, confirmed: true });
 
       // Verify it's gone
       const goals = await invoke<SmartGoal[]>('list_goals', { vaultId });
@@ -250,6 +251,7 @@ describe('Goal Operations (Integration)', () => {
         vaultId,
         goalId,
         taskId: task.id,
+        confirmed: true,
       });
 
       // Verify it's gone

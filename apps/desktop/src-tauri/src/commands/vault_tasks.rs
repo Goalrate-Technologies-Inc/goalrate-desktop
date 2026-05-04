@@ -117,6 +117,43 @@ fn sanitize_relative_path(path: &str) -> Result<PathBuf, AppError> {
     Ok(sanitized)
 }
 
+fn resolve_existing_task_entry_path(root: &Path, path: &str) -> Result<PathBuf, AppError> {
+    let sanitized = sanitize_relative_path(path)?;
+    if sanitized.as_os_str().is_empty() {
+        return Err(AppError::validation_error(
+            "Task entry path cannot be empty",
+        ));
+    }
+    let entry_path = root.join(sanitized);
+    if !entry_path.starts_with(root) {
+        return Err(AppError::validation_error(
+            "Task entry path must stay inside the vault",
+        ));
+    }
+    if !entry_path.exists() {
+        return Err(AppError::item_not_found("Task entry", path));
+    }
+    Ok(entry_path)
+}
+
+fn delete_task_entry_at_root(root: &Path, path: &str, confirmed: bool) -> Result<(), AppError> {
+    if !confirmed {
+        return Err(AppError::validation_error(
+            "Deleting a vault task entry requires explicit confirmation",
+        ));
+    }
+
+    let entry_path = resolve_existing_task_entry_path(root, path)?;
+
+    if entry_path.is_dir() {
+        std::fs::remove_dir_all(entry_path)?;
+    } else {
+        std::fs::remove_file(entry_path)?;
+    }
+
+    Ok(())
+}
+
 fn validate_entry_name(name: &str) -> Result<(), AppError> {
     if name.trim().is_empty() {
         return Err(AppError::validation_error("Name cannot be empty"));
@@ -385,10 +422,12 @@ pub async fn create_vault_task_file(
 #[cfg(test)]
 mod tests {
     use super::{
-        file_name_for_attempt, is_internal_goal_store_stem, sanitize_file_stem,
-        should_hide_internal_goal_file, TASK_FILE_STEM_MAX_CHARS, UNTITLED_TASK_STEM,
+        delete_task_entry_at_root, file_name_for_attempt, is_internal_goal_store_stem,
+        sanitize_file_stem, should_hide_internal_goal_file, TASK_FILE_STEM_MAX_CHARS,
+        UNTITLED_TASK_STEM,
     };
     use std::path::PathBuf;
+    use tempfile::TempDir;
 
     #[test]
     fn sanitize_file_stem_replaces_dot_and_invalid_characters() {
@@ -450,6 +489,63 @@ mod tests {
             &base.join("goals/InventoryApp/goal_a0e14d28e81a.md"),
             &base
         ));
+    }
+
+    #[test]
+    fn delete_task_entry_rejects_missing_confirmation_without_file_changes() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("tasks").join("draft.md");
+        std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+        std::fs::write(&file_path, "draft").unwrap();
+
+        let error = delete_task_entry_at_root(temp.path(), "tasks/draft.md", false)
+            .expect_err("delete should require explicit confirmation");
+
+        assert_eq!(error.code, "VALIDATION_ERROR");
+        assert!(error.message.contains("explicit confirmation"));
+        assert_eq!(std::fs::read_to_string(file_path).unwrap(), "draft");
+    }
+
+    #[test]
+    fn delete_task_entry_rejects_empty_path_without_deleting_vault_root() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("tasks").join("draft.md");
+        std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+        std::fs::write(&file_path, "draft").unwrap();
+
+        let error = delete_task_entry_at_root(temp.path(), "", true)
+            .expect_err("empty path should not resolve to the vault root");
+
+        assert_eq!(error.code, "VALIDATION_ERROR");
+        assert!(error.message.contains("cannot be empty"));
+        assert!(temp.path().exists());
+        assert!(file_path.exists());
+    }
+
+    #[test]
+    fn delete_task_entry_allows_confirmed_file_delete() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("tasks").join("draft.md");
+        std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+        std::fs::write(&file_path, "draft").unwrap();
+
+        delete_task_entry_at_root(temp.path(), "tasks/draft.md", true).unwrap();
+
+        assert!(!file_path.exists());
+        assert!(temp.path().join("tasks").exists());
+    }
+
+    #[test]
+    fn delete_task_entry_allows_confirmed_folder_delete() {
+        let temp = TempDir::new().unwrap();
+        let folder_path = temp.path().join("tasks").join("nested");
+        std::fs::create_dir_all(&folder_path).unwrap();
+        std::fs::write(folder_path.join("draft.md"), "draft").unwrap();
+
+        delete_task_entry_at_root(temp.path(), "tasks/nested", true).unwrap();
+
+        assert!(!folder_path.exists());
+        assert!(temp.path().join("tasks").exists());
     }
 }
 
@@ -559,6 +655,7 @@ pub async fn rename_vault_task_entry(
 pub async fn delete_vault_task_entry(
     vault_id: String,
     path: String,
+    confirmed: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let vaults = state.vaults.lock().unwrap();
@@ -568,19 +665,7 @@ pub async fn delete_vault_task_entry(
 
     let vault_path = manager.config().path.clone();
     let root = vault_root(&vault_path);
-    let entry_path = root.join(sanitize_relative_path(&path)?);
-
-    if !entry_path.exists() {
-        return Err(AppError::item_not_found("Task entry", &path));
-    }
-
-    if entry_path.is_dir() {
-        std::fs::remove_dir_all(entry_path)?;
-    } else {
-        std::fs::remove_file(entry_path)?;
-    }
-
-    Ok(())
+    delete_task_entry_at_root(&root, &path, confirmed.unwrap_or(false))
 }
 
 #[tauri::command]
